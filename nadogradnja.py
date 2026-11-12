@@ -141,8 +141,8 @@ def _dohvati(url, timeout=10):
 
 
 def github_verzija(repo=GITHUB):
-    """Verzija na GitHubu (provjerava se najviše jednom u 30 minuta; bez interneta vraća None)."""
-    if time.time() - _gh['vrijeme'] > 1800:
+    """Verzija na GitHubu (provjerava se najviše jednom u 5 minuta; bez interneta vraća None)."""
+    if time.time() - _gh['vrijeme'] > 300:
         _gh['vrijeme'] = time.time()
         try:
             _gh['verzija'] = _dohvati('https://raw.githubusercontent.com/%s/main/verzija.txt?t=%d'

@@ -80,7 +80,7 @@
 </head>
 <body>
 <header>
-  <b>📚 Narudžbe knjiga</b>
+  <b>📚 Narudžbe knjiga <small id="verzijaZag" style="font-weight:normal;opacity:.75;font-size:12px"></small></b>
   <a href="#narudzbe">Narudžbe</a>
   <a href="#nova">+ Nova narudžba</a>
   <a href="#predbiljezbe">Predbilježbe <span id="brPred" class="znacka crvena" style="display:none"></span></a>
@@ -148,6 +148,7 @@ async function ucitajOsnovno() {
   Object.assign(S, await api('/api/init'));
   provjeriNadogradnju();
   osvjeziBrojPred();
+  $('#verzijaZag').textContent = 'v' + S.verzija;
   S.knjige = await api('/api/knjige');
   S.kompleti = await api('/api/kompleti');
 }
