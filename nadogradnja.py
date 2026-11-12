@@ -24,7 +24,7 @@ DOZVOLJENE = {'knjige.py', 'javno.py', 'popis.py', 'obrasci.py', 'dbf.py', 'nado
               'Postavi program.bat', 'Objavi predbiljezbu na internetu.bat'}
 UZORAK = 'Narudzbe-knjiga-nadogradnja*.zip'
 GITHUB = 'giljevicivan-gif/narudzbe-knjiga'  # javni repozitorij s kodom programa (bez podataka)
-_gh = {'vrijeme': 0, 'verzija': None}
+_gh = {'vrijeme': 0, 'verzija': None, 'greska': ''}
 
 
 def kljuc(verzija):
@@ -140,14 +140,17 @@ def _dohvati(url, timeout=10):
         return r.read()
 
 
-def github_verzija(repo=GITHUB):
+def github_verzija(repo=GITHUB, odmah=False):
     """Verzija na GitHubu (provjerava se najviše jednom u 5 minuta; bez interneta vraća None)."""
-    if time.time() - _gh['vrijeme'] > 300:
+    if odmah or time.time() - _gh['vrijeme'] > 300:
         _gh['vrijeme'] = time.time()
         try:
             _gh['verzija'] = _dohvati('https://raw.githubusercontent.com/%s/main/verzija.txt?t=%d'
-                                      % (repo, time.time()), 5).decode('utf-8').strip()
-        except Exception:
+                                      % (repo, time.time()), 10).decode('utf-8').strip()
+            _gh['greska'] = ''
+        except Exception as e:
+            print('Provjera nadogradnje na GitHubu nije uspjela:', repr(e))
+            _gh['greska'] = repr(e)
             _gh['verzija'] = None
     return _gh['verzija']
 

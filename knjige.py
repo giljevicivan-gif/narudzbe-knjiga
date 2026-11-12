@@ -26,7 +26,7 @@ import nadogradnja
 import obrasci
 import popis
 
-VERZIJA = '2026.11.13'
+VERZIJA = '2026.11.14'
 MAPA = os.path.dirname(os.path.abspath(__file__))
 BAZA = os.path.join(MAPA, 'knjige.db')
 CONFIG = os.path.join(MAPA, 'postavke.json')
@@ -338,10 +338,10 @@ def api_get(c, put, q):
     g = lambda k, d='': q.get(k, [d])[0]
     if put == '/api/nadogradnja':
         dostupna = nadogradnja.pronadji(VERZIJA, [postavke(c).get('kopija_mapa', '')])
-        gh = nadogradnja.github_verzija()
+        gh = nadogradnja.github_verzija(odmah=bool(q.get('odmah')))
         if gh and nadogradnja.kljuc(gh) > nadogradnja.kljuc(dostupna['verzija'] if dostupna else VERZIJA):
             dostupna = {'verzija': gh, 'ime': 's interneta', 'github': True}
-        return {'verzija': VERZIJA, 'dostupna': dostupna}
+        return {'verzija': VERZIJA, 'dostupna': dostupna, 'github': gh, 'greska': nadogradnja._gh['greska']}
     if put == '/api/init':
         for r in rows(c.execute('SELECT id, naziv FROM skole WHERE tip IS NULL')):
             c.execute('UPDATE skole SET tip = ? WHERE id = ?', (razina_skole(r['naziv']), r['id']))

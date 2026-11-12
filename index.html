@@ -1299,7 +1299,7 @@ function stranicaPostavke() {
     <div class="okvir"><b>Nadogradnja programa</b> <span class="siv">– trenutna verzija ${esc(S.verzija || '')}</span>
       <p class="siv" style="margin:6px 0">Datoteku "Narudzbe-knjiga-nadogradnja-….zip" samo spremite u Preuzimanja ili na radnu površinu – program je sam pronađe i ponudi.
         Ili je odaberite ovdje. Podaci se ne diraju; Setup više ne treba pokretati.</p>
-      <div class="traka"><button class="glavni" id="nadUcitaj">Učitaj nadogradnju…</button><input type="file" id="nadDat" accept=".zip" style="display:none"></div></div>
+      <div class="traka"><button class="glavni" id="nadProvjeri">Provjeri ima li nova verzija</button><button id="nadUcitaj">Učitaj nadogradnju…</button><input type="file" id="nadDat" accept=".zip" style="display:none"></div></div>
     <p class="siv">Program iz Vulpesa samo čita (nazive, barkodove, cijene, stanje) i ništa u Vulpesu ne mijenja.<br>Kad Vulpes otvori novu godinu, ovdje upiši novu mapu.</p>`;
   const spremi = async () => {
     const d = {};
@@ -1317,6 +1317,12 @@ function stranicaPostavke() {
     S.skole.find(s => s.id == sel.dataset.skola).tip = sel.value; poruka('Spremljeno.');
   });
   $('#nadUcitaj').onclick = () => $('#nadDat').click();
+  $('#nadProvjeri').onclick = async () => {
+    const r = await (await fetch('/api/nadogradnja?odmah=1')).json();
+    if (r.dostupna) { provjeriNadogradnju(); window.scrollTo(0, 0); }
+    else if (r.greska) poruka('Provjera nije uspjela: ' + r.greska, true);
+    else poruka('Imate najnoviju verziju (' + r.verzija + ').');
+  };
   $('#nadDat').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (f) nadogradi({ sadrzaj: await datotekaBase64(f) }); };
   $('#kopija').onclick = async () => {
     await spremi(); const r = await api('/api/kopija', {});
