@@ -26,7 +26,7 @@ import nadogradnja
 import obrasci
 import popis
 
-VERZIJA = '2026.11.14'
+VERZIJA = '2026.11.16'
 MAPA = os.path.dirname(os.path.abspath(__file__))
 BAZA = os.path.join(MAPA, 'knjige.db')
 CONFIG = os.path.join(MAPA, 'postavke.json')

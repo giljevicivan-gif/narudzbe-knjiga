@@ -14,11 +14,14 @@ INSTALACIJA (jednom, na svakom računalu)
    (Pokreni.bat i dalje radi - s crnim prozorom, korisno ako treba vidjeti grešku.
    Greške se inače zapisuju u program.log.)
 
+ZATVARANJE PROGRAMA
+Program radi u pozadini i kad zatvorite preglednik. Potpuno ga zatvarate crvenim
+gumbom "⏻ Zatvori" gore desno.
+
 NADOGRADNJA PROGRAMA (bez Setupa)
-Setup se pokreće samo jednom. Nove verzije stižu kao datoteka
-"Narudzbe-knjiga-nadogradnja-<verzija>.zip". Spremite je u Preuzimanja ili na radnu
-površinu i otvorite program - gore se pojavi žuta traka "Pronađena je nova verzija"
--> "Nadogradi sad". Program se sam zamijeni i ponovno pokrene, podaci ostaju.
+Setup se pokreće samo jednom. Nove verzije stižu same preko interneta (GitHub):
+gore se pojavi žuta traka "Pronađena je nova verzija" -> "Nadogradi sad".
+Odmah provjeriti: Postavke -> "Provjeri ima li nova verzija". Program se sam zamijeni i ponovno pokrene, podaci ostaju.
 Može i ručno: Postavke -> "Učitaj nadogradnju…".
 Ako nova verzija ne bi radila, program sam vrati staru (spremljena je u mapi stara_verzija).
 

@@ -93,11 +93,12 @@
   <a href="#postavke">Postavke</a>
   <span id="razina" title="Prikaži samo osnovne ili samo srednje škole (narudžbe, nakladnici, kompleti, zbirni popis)">
     <button data-r="">Sve</button><button data-r="OŠ">Osnovne</button><button data-r="SŠ">Srednje</button></span>
+  <button id="zatvoriZag" onclick="zatvoriProgram()" title="Potpuno zatvara program (radi u pozadini i kad zatvorite preglednik)" style="margin-left:6px;background:#b91c1c;color:#fff;border:0;border-radius:6px;padding:5px 9px;font-weight:600;cursor:pointer;white-space:nowrap">⏻ Zatvori</button>
 </header>
+<div id="nadBanner" style="display:none;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:10px 16px;font-size:16px"></div>
 <main id="sadrzaj"></main>
 <div id="ispis"></div>
 <div id="poruka"></div>
-<div id="nadBanner" style="display:none;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:10px 16px;font-size:16px"></div>
 
 <script>
 const S = { skole: [], postavke: {}, statusi: [], godine: [], knjige: [], kompleti: [], filter: {} };
@@ -121,6 +122,11 @@ function poruka(tekst, greska) {
   const p = $('#poruka');
   p.textContent = tekst; p.style.background = greska ? 'var(--crvena)' : 'var(--zelena)'; p.style.display = 'block';
   clearTimeout(p._t); p._t = setTimeout(() => p.style.display = 'none', greska ? 6000 : 2500);
+}
+async function zatvoriProgram() {
+  if (!confirm('Zatvoriti program? Predbilježbe s interneta neće raditi dok ga ponovno ne pokrenete.')) return;
+  await api('/api/ugasi', {});
+  document.body.innerHTML = '<p style="padding:40px;font-size:18px">Program je zatvoren. Ovu karticu preglednika možete zatvoriti.<br>Ponovno ga pokrenite ikonom "Narudžbe knjiga" na radnoj površini.</p>';
 }
 async function nadogradi(d) {
   const b = $('#nadBanner'); b.style.display = 'block'; b.textContent = '⏳ Nadograđujem program, pričekajte…';
@@ -1307,11 +1313,7 @@ function stranicaPostavke() {
     S.postavke = await api('/api/postavke', d);
   };
   $('#spremi').onclick = async () => { await spremi(); poruka('Postavke spremljene.'); };
-  $('#ugasi').onclick = async () => {
-    if (!confirm('Zatvoriti program? Predbilježbe s interneta neće raditi dok ga ponovno ne pokrenete.')) return;
-    await api('/api/ugasi', {});
-    document.body.innerHTML = '<p style="padding:40px;font-size:18px">Program je zatvoren. Ovu karticu preglednika možete zatvoriti.<br>Ponovno ga pokrenite ikonom "Narudžbe knjiga" na radnoj površini.</p>';
-  };
+  $('#ugasi').onclick = zatvoriProgram;
   document.querySelectorAll('[data-skola]').forEach(sel => sel.onchange = async () => {
     await api('/api/skola', { id: +sel.dataset.skola, tip: sel.value });
     S.skole.find(s => s.id == sel.dataset.skola).tip = sel.value; poruka('Spremljeno.');

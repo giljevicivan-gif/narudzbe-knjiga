@@ -134,8 +134,9 @@ def ponovno_pokreni():
                      close_fds=True)
 
 
-def _dohvati(url, timeout=10):
-    req = urllib.request.Request(url, headers={'User-Agent': 'narudzbe-knjiga', 'Cache-Control': 'no-cache'})
+def _dohvati(url, timeout=10, zaglavlja=None):
+    req = urllib.request.Request(url, headers=dict({'User-Agent': 'narudzbe-knjiga', 'Cache-Control': 'no-cache'},
+                                                   **(zaglavlja or {})))
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
@@ -145,8 +146,12 @@ def github_verzija(repo=GITHUB, odmah=False):
     if odmah or time.time() - _gh['vrijeme'] > 300:
         _gh['vrijeme'] = time.time()
         try:
-            _gh['verzija'] = _dohvati('https://raw.githubusercontent.com/%s/main/verzija.txt?t=%d'
-                                      % (repo, time.time()), 10).decode('utf-8').strip()
+            try:  # API daje uvijek svježu datoteku (raw.githubusercontent zna kasniti i 10 minuta)
+                v = _dohvati('https://api.github.com/repos/%s/contents/verzija.txt' % repo, 10,
+                             {'Accept': 'application/vnd.github.raw'})
+            except Exception:
+                v = _dohvati('https://raw.githubusercontent.com/%s/main/verzija.txt' % repo, 10)
+            _gh['verzija'] = v.decode('utf-8').strip()
             _gh['greska'] = ''
         except Exception as e:
             print('Provjera nadogradnje na GitHubu nije uspjela:', repr(e))
@@ -157,7 +162,7 @@ def github_verzija(repo=GITHUB, odmah=False):
 
 def github_zip(repo=GITHUB):
     """Skini kod s GitHuba i složi ga u zip nadogradnje (samo dopuštene datoteke)."""
-    z = zipfile.ZipFile(io.BytesIO(_dohvati('https://codeload.github.com/%s/zip/refs/heads/main' % repo, 60)))
+    z = zipfile.ZipFile(io.BytesIO(_dohvati('https://api.github.com/repos/%s/zipball/main' % repo, 60)))
     izlaz = io.BytesIO()
     with zipfile.ZipFile(izlaz, 'w', zipfile.ZIP_DEFLATED) as zout:
         for i in z.infolist():
