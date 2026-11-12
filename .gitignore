@@ -1,0 +1,11 @@
+# Podaci kupaca i postavke NIKAD ne idu na GitHub
+*.db
+*.db-*
+postavke.json
+*.ini
+*.log
+logo.png
+python/
+sigurnosne_kopije/
+stara_verzija/
+__pycache__/

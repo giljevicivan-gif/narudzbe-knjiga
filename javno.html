@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predbilježba udžbenika</title>
+<style>
+  :root { --plava: #1e5a96; --siva: #6b7280; --rub: #d1d5db; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: #111827; background: #f3f4f6; }
+  header { background: var(--plava); color: #fff; padding: 16px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header div { opacity: .9; font-size: 14px; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; }
+  .okvir { background: #fff; border: 1px solid var(--rub); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  label { display: block; margin: 10px 0 4px; font-weight: 600; font-size: 14px; }
+  input, select, textarea { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--rub); border-radius: 8px; background: #fff; }
+  textarea { min-height: 70px; }
+  .knjiga { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #eee; }
+  .knjiga input { width: 22px; height: 22px; flex: none; margin-top: 2px; }
+  .knjiga .n { flex: 1; } .knjiga .c { white-space: nowrap; font-weight: 600; }
+  .siv { color: var(--siva); font-size: 14px; }
+  .ukupno { text-align: right; font-size: 18px; margin-top: 10px; }
+  button { font: inherit; font-weight: 600; padding: 12px 18px; border: 0; border-radius: 8px; background: var(--plava); color: #fff; width: 100%; cursor: pointer; }
+  button:disabled { opacity: .6; }
+  .privola { display: flex; gap: 10px; font-weight: normal; }
+  .privola input { width: 22px; height: 22px; flex: none; }
+  .greska { color: #b91c1c; margin-top: 10px; }
+  .uspjeh { background: #dcfce7; border-color: #86efac; }
+  .skriveno { position: absolute; left: -5000px; }
+</style>
+</head>
+<body>
+<header><h1 id="firma">Predbilježba udžbenika</h1><div id="kontakt"></div></header>
+<main id="sadrzaj"><p class="siv">Učitavam…</p></main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const kn = v => (Number(v) || 0).toLocaleString('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+async function api(put, podaci) {
+  const r = await fetch(put, podaci ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(podaci) } : {});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.greska || 'Greška');
+  return j;
+}
+let P;
+function provjera() {
+  return `<div class="okvir"><h2>Provjeri predbilježbu</h2>
+    <label>Broj predbilježbe<input id="sBroj" inputmode="numeric"></label>
+    <label>Telefon<input id="sTel" type="tel"></label>
+    <p><button id="sProvjeri" style="background:#374151">Provjeri</button></p><div id="sRez"></div></div>`;
+}
+function vezaProvjere() {
+  $('#sProvjeri').onclick = async () => {
+    try { $('#sRez').innerHTML = '<b>' + esc((await api(`/api/status?broj=${encodeURIComponent($('#sBroj').value)}&telefon=${encodeURIComponent($('#sTel').value)}`)).status) + '</b>'; }
+    catch (e) { $('#sRez').innerHTML = `<div class="greska">${esc(e.message)}</div>`; }
+  };
+}
+async function start() {
+  P = await api('/api/podaci');
+  document.title = 'Predbilježba udžbenika – ' + P.firma;
+  $('#firma').textContent = P.firma || 'Predbilježba udžbenika';
+  $('#kontakt').textContent = [P.adresa, P.telefon && 'tel. ' + P.telefon].filter(Boolean).join(' · ');
+  if (!P.otvoreno || !P.kompleti.length) {
+    $('#sadrzaj').innerHTML = `<div class="okvir"><h2>Predbilježbe trenutno nisu otvorene</h2>
+      <p>Za narudžbu udžbenika nazovite nas${P.telefon ? ' na ' + esc(P.telefon) : ''} ili dođite u knjižaru.</p></div>` + provjera();
+    return vezaProvjere();
+  }
+  const skole = [...new Map(P.kompleti.map(k => [k.skola_id, k.skola])).entries()];
+  $('#sadrzaj').innerHTML = `
+    <div class="okvir"><h2>Udžbenici za školsku godinu ${P.sezona}./${P.sezona + 1}.</h2><p class="siv">${esc(P.tekst)}</p>
+      <label>Škola<select id="skola"><option value="">— odaberite školu —</option>${skole.map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}</select></label>
+      <label>Razred<select id="razred" disabled></select></label>
+      <div id="smjerKutija" style="display:none"><label>Smjer / program<select id="komplet"></select></label></div>
+    </div>
+    <div class="okvir" id="knjigeKutija" style="display:none"><h2>Knjige</h2><p class="siv">Odznačite knjige koje već imate.</p>
+      <div id="knjige"></div><div class="ukupno">Ukupno: <b id="ukupno"></b></div></div>
+    <div class="okvir" id="podaciKutija" style="display:none"><h2>Vaši podaci</h2>
+      <label>Ime i prezime<input id="kupac" autocomplete="name" maxlength="80"></label>
+      <label>Mobitel (za obavijest kad knjige stignu)<input id="telefon" type="tel" autocomplete="tel" maxlength="30"></label>
+      <label>E-mail (nije obavezno)<input id="email" type="email" autocomplete="email" maxlength="100"></label>
+      <label>Napomena (nije obavezno)<textarea id="napomena" maxlength="500"></textarea></label>
+      <input class="skriveno" id="web" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label class="privola"><input type="checkbox" id="privola"> <span>Slažem se da ${esc(P.firma)} koristi moje ime i broj telefona samo za ovu narudžbu i obavijest o njoj.</span></label>
+      <p><button id="posalji">Pošalji predbilježbu</button></p><div id="greska"></div>
+      <p class="siv">Predbilježba nije plaćanje. Cijene su informativne, plaća se pri preuzimanju.</p></div>` + provjera();
+  vezaProvjere();
+  const kompletiZa = () => P.kompleti.filter(k => k.skola_id == $('#skola').value && k.razred == $('#razred').value);
+  $('#skola').onchange = () => {
+    const raz = [...new Set(P.kompleti.filter(k => k.skola_id == $('#skola').value).map(k => k.razred))].sort();
+    $('#razred').innerHTML = '<option value="">— razred —</option>' + raz.map(r => `<option value="${esc(r)}">${esc(r)}. razred</option>`).join('');
+    $('#razred').disabled = !raz.length; prikazi();
+  };
+  $('#razred').onchange = () => {
+    const ks = kompletiZa();
+    $('#komplet').innerHTML = (ks.length > 1 ? '<option value="">— odaberite smjer —</option>' : '') + ks.map(k => `<option value="${k.id}">${esc(k.naziv)}</option>`).join('');
+    $('#smjerKutija').style.display = ks.length > 1 ? '' : 'none'; prikazi();
+  };
+  $('#komplet').onchange = prikazi;
+  $('#posalji').onclick = posalji;
+}
+function odabraniKomplet() { return P.kompleti.find(k => k.id == $('#komplet').value && k.razred == $('#razred').value); }
+function prikazi() {
+  const k = $('#razred').value && odabraniKomplet();
+  $('#knjigeKutija').style.display = $('#podaciKutija').style.display = k ? '' : 'none';
+  if (!k) return;
+  $('#knjige').innerHTML = k.knjige.map(b => `<label class="knjiga" style="font-weight:normal;margin:0"><input type="checkbox" value="${b.id}" checked>
+    <span class="n">${esc(b.naziv)}<br><span class="siv">${esc([b.vrsta, b.nakladnik].filter(Boolean).join(' · '))}</span></span><span class="c">${kn(b.cijena)}</span></label>`).join('');
+  const zbroj = () => $('#ukupno').textContent = kn(k.knjige.filter(b => document.querySelector(`#knjige input[value="${b.id}"]`).checked).reduce((a, b) => a + b.cijena, 0));
+  $('#knjige').onchange = zbroj; zbroj();
+}
+async function posalji() {
+  const k = odabraniKomplet();
+  $('#greska').innerHTML = ''; $('#posalji').disabled = true;
+  try {
+    const r = await api('/api/predbiljezba', { komplet_id: k && k.id, knjige: [...document.querySelectorAll('#knjige input:checked')].map(i => +i.value),
+      kupac: $('#kupac').value, telefon: $('#telefon').value, email: $('#email').value, napomena: $('#napomena').value,
+      privola: $('#privola').checked, web: $('#web').value });
+    $('#sadrzaj').innerHTML = `<div class="okvir uspjeh"><h2>Hvala! Predbilježba je zaprimljena.</h2>
+      <p>Broj Vaše predbilježbe: <b style="font-size:22px">${r.broj}</b></p>
+      <p>Javit ćemo Vam se kad knjige stignu. Stanje možete provjeriti na ovoj stranici s brojem predbilježbe i telefonom.</p></div>`;
+    window.scrollTo(0, 0);
+  } catch (e) { $('#greska').innerHTML = `<div class="greska">${esc(e.message)}</div>`; $('#posalji').disabled = false; }
+}
+start().catch(e => $('#sadrzaj').innerHTML = `<div class="okvir">Stranica se nije učitala. Nazovite nas.</div>`);
+</script>
+</body>
+</html>

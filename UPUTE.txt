@@ -1,0 +1,198 @@
+NARUDŽBE KNJIGA - upute
+=======================
+
+INSTALACIJA (jednom, na svakom računalu)
+1. Python NE treba instalirati - već je u mapi "python".
+2. Kopirajte cijelu mapu "knjige-program" (npr. USB-om) u C:\Knjige
+   (bolje nego na radnu površinu).
+3. Dvaput kliknite "Postavi program.bat". Na radnoj površini dobijete ikonu
+   "Narudzbe knjiga". Pita i treba li se program sam pokretati s Windowsima
+   (preporučeno ako koristite online predbilježbu).
+4. Program se pokreće ikonom. Radi u pozadini, bez crnog prozora.
+   Ako je već pokrenut, ikona samo otvori preglednik.
+   Potpuno se zatvara u Postavkama gumbom "Zatvori program".
+   (Pokreni.bat i dalje radi - s crnim prozorom, korisno ako treba vidjeti grešku.
+   Greške se inače zapisuju u program.log.)
+
+NADOGRADNJA PROGRAMA (bez Setupa)
+Setup se pokreće samo jednom. Nove verzije stižu kao datoteka
+"Narudzbe-knjiga-nadogradnja-<verzija>.zip". Spremite je u Preuzimanja ili na radnu
+površinu i otvorite program - gore se pojavi žuta traka "Pronađena je nova verzija"
+-> "Nadogradi sad". Program se sam zamijeni i ponovno pokrene, podaci ostaju.
+Može i ručno: Postavke -> "Učitaj nadogradnju…".
+Ako nova verzija ne bi radila, program sam vrati staru (spremljena je u mapi stara_verzija).
+
+PRIJENOS NA DRUGO RAČUNALO
+Svi podaci su u datoteci knjige.db u mapi programa. Zatvorite program (Postavke ->
+"Zatvori program") pa kopirajte CIJELU mapu na novo računalo i napravite korake iz
+INSTALACIJE. Na novom računalu u Postavkama ponovno odaberite Vulpes mapu
+("Pronađi Vulpes na računalu"). Ako je Vulpes na drugom računalu u mreži, upišite
+mrežni put do njegove mape (npr. \\SERVER\Vulpes\2026).
+Ne radite istovremeno na dvije kopije - podaci se ne spajaju. Za rad s više računala
+vidi VIŠE RAČUNALA niže.
+
+U mapi je već datoteka knjige.db s prenesenim podacima iz starog programa
+(1034 knjige, 76 kompleta, 347 narudžbi iz 2026.). Stare narudžbe su označene kao "preuzeto".
+
+POVEZIVANJE S VULPESOM
+Postavke -> upišite mapu s Vulpes podacima za tekuću godinu (npr. C:\ROBA\2026)
+-> "Provjeri vezu s Vulpesom".
+Program iz Vulpesa SAMO ČITA (naziv, barkod, cijenu, stanje). U Vulpesu ništa ne mijenja.
+
+Gdje se Vulpes koristi:
+- Nova narudžba: upišite ili očitajte barkod, Enter -> ako knjige nema u našem popisu,
+  traži se u Vulpesu i automatski doda.
+- Knjige -> "Dodaj iz Vulpesa": potražite artikl i dodajte ga s nazivom, barkodom i cijenom.
+- Knjige -> "Usporedi cijene s Vulpesom": popis knjiga kojima je cijena u Vulpesu drugačija,
+  jednim klikom se preuzmu nove cijene. Tu je i popis knjiga koje nisu nađene u Vulpesu.
+
+RAD
+- Nova narudžba: kupac, telefon, škola, razred -> odaberite komplet (doda sve knjige)
+  -> maknite što ne treba (✕) -> akontacija -> Spremi (ili Spremi i ispiši).
+- Narudžbe: pretraga po imenu/telefonu/broju, filtri, označite kvačicom pa promijenite
+  status (naručeno / stiglo / preuzeto) ili ispišite listiće.
+- Zbirni popis: koliko kojih knjiga treba, po nakladniku (za naručivanje). Ima i Excel.
+- Kompleti: popis knjiga po školi, smjeru i razredu.
+- Kompleti -> "Učitaj popis škole": preuzmite popis udžbenika sa stranice škole
+  (PDF, Word .docx ili Excel .xlsx), odaberite školu i učitajte datoteku.
+  Program prepozna smjerove, razrede i knjige i ponudi knjige iz našeg popisa
+  ili iz Vulpesa. Žute redove provjerite (🔍 = potraži drugu knjigu,
+  ⤒ = spoji s redom iznad ako se naslov prelomio), pa "Spremi komplete".
+  Skenirani PDF-ovi (slike) se ne mogu pročitati.
+
+NAKLADNICI (narudžbenice)
+Popis nakladnika i koliko knjiga treba naručiti (naručeno od kupaca minus već
+naručeno). "Napravi narudžbenicu" -> provjeri količine -> Spremi -> Ispiši,
+Excel ili "Pošalji e-mailom" (otvori se e-mail s popisom; adresa se zapamti).
+
+STIGLO
+Kad stigne pošiljka, očitajte barkodove. Program knjige rasporedi na narudžbe
+(najstarije prve) i pokaže kompletne narudžbe s gumbima WhatsApp/SMS za kupca.
+Tekst poruke mijenjate u Postavkama.
+
+BRZI UNOS NARUDŽBE
+Na novoj narudžbi prvo odaberite školu i razred. Ako razred ima jedan komplet, odmah se
+pokaže popis njegovih knjiga s kvačicama; ako ima više smjerova, odaberite smjer.
+Odznačite knjige koje kupac ne treba i kliknite "Dodaj označene".
+"knjige nakladnika…" pokaže sve knjige jednog nakladnika, a "Otvori cijeli popis"
+sve knjige (već suženo na odabranu školu i razred).
+
+RABLJENE
+Otkup (očitate knjigu, cijene se predlože prema postotku iz Postavki) i prodaja.
+
+STATISTIKA
+Promet, narudžbe po školama i nakladnicima, najtraženije knjige, rabljene.
+
+OBRASCI ZA NARUDŽBU (papir za pult)
+Kompleti -> označite kvačicom komplete (ili gornjom kvačicom sve za odabranu školu)
+-> "Ispiši obrasce za označene". Za svaki razred/smjer ispiše se list s popisom knjiga
+(po predmetima, kao na popisu škole), kvačicama za knjige, mjestom za ime roditelja,
+učenika, mobitel, akontaciju (NE / DA, iznos), način plaćanja, tko plaća i potpis.
+Na dnu je potvrda za kupca koja se odreže škarama.
+Predmeti se pamte kad popis škole učitate kroz "Učitaj popis škole".
+
+BARKODOVI NA LISTIĆU
+Uz svaku knjigu koja ima barkod ispiše se crtični kod. Kad kupac dođe po knjige,
+na blagajni u Vulpesu samo očitate barkodove s listića.
+
+OSNOVNE I SREDNJE ŠKOLE ODVOJENO
+Gore desno su gumbi "Sve / Osnovne / Srednje". Kad odaberete npr. "Osnovne", popis
+narudžbi, nakladnici, narudžbenice, zbirni popis, kompleti i izbor škola pokazuju samo
+osnovne škole. Program sam prepozna osnovne škole po "OŠ" u nazivu; ispravak je u
+Postavkama -> "Škole – osnovna ili srednja". Izbor se pamti.
+Narudžbenica napravljena dok je odabrano "Osnovne" označena je s OŠ (i obrnuto).
+Ne miješajte: ako osnovne i srednje naručujete odvojeno, uvijek radite s odabranim
+"Osnovne" ili "Srednje", a ne sa "Sve".
+
+SVE NARUDŽBENICE JEDNIM KLIKOM
+Nakladnici -> "⚡ Napravi sve narudžbenice odjednom" napravi narudžbenicu za svakog
+nakladnika s predloženim količinama i odmah ih ispiše (svaka na svom listu).
+"Ispiši današnje narudžbenice" ih ponovno ispiše. E-mail se šalje iz svake narudžbenice.
+
+EXCEL NARUDŽBENICA NAKLADNIKA (ŠK, PROFIL KLETT, ALFA...)
+U narudžbenici kliknite "📗 Popuni Excel nakladnika" i prvi put odaberite Excel
+obrazac koji je poslao nakladnik. Program upiše količine u stupac "Količina" po
+barkodu i spremi popunjenu datoteku u Preuzimanja (npr. alfa_br3-2026.xlsx) -
+nju priložite u e-mail nakladniku. Obrazac se zapamti, sljedeći put je dovoljan klik.
+Kad nakladnik pošalje novi obrazac: "učitaj novi obrazac".
+- Naslovi kojih nema u obrascu ispišu se crveno - njih dopišite ručno.
+- Stare količine koje su već bile upisane u obrascu program obriše.
+- Profil Klett šalje stari format .xls: otvorite ga u Excelu, Datoteka -> Spremi
+  kao -> "Excel radna knjiga (*.xlsx)", pa učitajte tu .xlsx datoteku.
+- Školska knjiga nema stupac za količinu - program doda stupac "KOLIČINA".
+
+POVRAT NAKLADNIKU (REMISIJA)
+Nakladnici -> "Povrat nakladniku": odaberete nakladnika, program predloži višak
+(naručeno od nakladnika minus ono što trebaju kupci). Provjerite sa stanjem u
+Vulpesu, spremite i pošaljite povratnicu e-mailom. Narudžbe kupaca koji su
+odustali označite statusom "otkazano" (ne broje se ni za naručivanje ni u zbirnom popisu).
+
+TKO PLAĆA
+Na narudžbi polje "Plaća": prazno = roditelj, ili Grad, CZSS, Županija...
+Na popisu narudžbi se filtrira po platitelju (npr. za ispis popisa za Grad),
+a Statistika pokazuje iznos po platitelju.
+
+POPIS ZA GRAD / ŽUPANIJU / CZSS
+Narudžbe -> u izborniku platitelja odaberite npr. "Grad" -> gumb "📄 Popis za Grad".
+Ispiše se popis učenika s knjigama i iznosima (ili Excel/CSV) za priložiti uz račun.
+Može se suziti i po školi te Osnovne/Srednje.
+
+OBAVIJESTI SVE ODJEDNOM
+Narudžbe (označite kvačicom) -> "📲 Obavijesti označene", ili u Stiglo nakon raspoređivanja
+-> "Obavijesti sve označene". Otvori se popis; gumb "WhatsApp: ime ▶" otvara poruku za
+sljedećeg kupca. Pošaljete, vratite se u program i kliknete za sljedećeg.
+
+PODSJETNIK ZA NEPREUZETE KNJIGE
+Kad narudžba dobije status "stiglo", program pamti datum. Ako kupac ne dođe za
+X dana (Postavke), narudžba dobije crvenu oznaku ⏰, a gumbi WhatsApp/SMS šalju
+tekst podsjetnika. Na popisu narudžbi kvačica "nepreuzeto" pokaže samo njih.
+
+KUPAC PO TELEFONU
+Na novoj narudžbi upišite telefon i kliknite dalje - ako je kupac već naručivao,
+pojavi se prijedlog. Klik popuni ime, školu i razred (razred se poveća za novu godinu).
+
+RABLJENI PRIMJERAK NA STANJU
+Ako za knjigu na narudžbi imate rabljeni primjerak na stanju, pokaže se zelena
+oznaka ♻ s cijenom, pa kupcu možete ponuditi jeftiniju.
+
+KATALOG MINISTARSTVA
+S mzom.gov.hr skinite Excel "Katalog odobrenih udžbenika" i u Knjige -> "Uvoz
+kataloga ministarstva" ga učitajte. Program poveže svoje knjige sa šiframa iz
+kataloga, a kod učitavanja popisa škole pokaže službeni naziv i bolje pogađa knjige.
+
+ONLINE PREDBILJEŽBA ZA RODITELJE
+Program ima posebnu stranicu za roditelje (http://localhost:8766/). Na njoj se vidi
+samo: škole, razredi, kompleti s cijenama, obrazac za predbilježbu i provjera statusa.
+Narudžbe, kupci i postavke s te adrese NISU dostupni.
+1. Postavke -> "Online predbilježba roditelja" = otvorena (i tekst za roditelje).
+   Roditelji vide samo komplete učitane za tekuću sezonu.
+2. Objava na internetu (jednom): instalirajte Tailscale (https://tailscale.com/download),
+   prijavite se (npr. Google računom) i pokrenite "Objavi predbiljezbu na internetu.bat".
+   Dobit ćete stalnu adresu https://....ts.net - upišite je u Postavke i dajte roditeljima
+   (Facebook, plakat u izlogu, SMS).
+3. Nove predbilježbe se vide pod "Predbilježbe" (crveni broj). "Prebaci u narudžbu"
+   napravi običnu narudžbu, a roditelj na stranici vidi status (naručeno / stiglo).
+Računalo i program moraju biti upaljeni da bi stranica radila (isključite spavanje
+računala u sezoni). Zaštita: najviše 5 slanja u 10 minuta s iste adrese, 300 na dan.
+
+VIŠE RAČUNALA
+Program radi na jednom računalu. Da bi ga koristila i druga računala u mreži,
+u datoteci postavke.json stavite "mreza": true, ponovno pokrenite i na drugom
+računalu u pregledniku otvorite http://IME-RAČUNALA:8765/
+
+OTVARANJE NOVE GODINE
+Postavke -> "Otvaranje nove godine…" vodi kroz korake: otvaranje sezone (narudžbe
+kreću od broja 1, stare ostaju), nova Vulpes mapa, nove cijene, novi popisi škola
+(kompleti sa starim popisom su žuti) i nova napomena na listiću.
+
+SIGURNOSNA KOPIJA
+Svi podaci su u jednoj datoteci: knjige.db. Program jednom dnevno sam napravi kopiju
+u mapu sigurnosne_kopije (čuva zadnjih 30).
+Dodatna kopija: u Postavkama upišite mapu na USB-u ili Google Drive mapu (npr.
+G:\Moj disk\Knjige ako imate Google Drive za računalo) - program tamo svaki dan stavi
+kopiju (čuva zadnjih 20). U Postavkama piše kad je zadnja kopija uspjela.
+Vraćanje: zatvorite program, kopiju preimenujte u knjige.db i stavite u mapu programa.
+
+PONOVNI PRIJENOS IZ STAROG PROGRAMA (ako zatreba)
+Obrišite knjige.db, pa u naredbenom retku u ovoj mapi:
+  python knjige.py --uvoz "C:\put\do\RABLJENJE"

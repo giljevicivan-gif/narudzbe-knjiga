@@ -1,0 +1,1377 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Narudžbe knjiga</title>
+<style>
+  :root { --plava: #1f5f99; --siva: #f3f4f6; --rub: #d1d5db; --crvena: #b91c1c; --zelena: #15803d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.4 "Segoe UI", Arial, sans-serif; color: #111827; background: #fff; }
+  header { background: var(--plava); color: #fff; display: flex; align-items: center; gap: 4px; padding: 0 12px; flex-wrap: wrap; }
+  header b { margin-right: 16px; font-size: 17px; }
+  header a { color: #fff; text-decoration: none; padding: 12px 12px; border-bottom: 3px solid transparent; }
+  #razina { margin-left: auto; display: flex; border: 1px solid rgba(255,255,255,.6); border-radius: 8px; overflow: hidden; }
+  #razina button { background: transparent; color: #fff; border: 0; border-radius: 0; padding: 6px 10px; cursor: pointer; font: inherit; }
+  #razina button.aktivno { background: #fff; color: var(--plava); font-weight: 600; }
+  header a.aktivno { border-bottom-color: #fff; font-weight: 600; }
+  main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+  h2 { margin: 4px 0 12px; font-size: 20px; }
+  .traka { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .traka .desno { margin-left: auto; display: flex; gap: 8px; }
+  input, select, textarea, button { font: inherit; }
+  input, select, textarea { padding: 6px 8px; border: 1px solid var(--rub); border-radius: 4px; background: #fff; }
+  textarea { width: 100%; min-height: 60px; }
+  button { padding: 6px 14px; border: 1px solid var(--rub); border-radius: 4px; background: #fff; cursor: pointer; }
+  button:hover { background: var(--siva); }
+  button.glavni { background: var(--plava); color: #fff; border-color: var(--plava); }
+  button.opasno { color: var(--crvena); }
+  button.mali { padding: 2px 8px; font-size: 13px; }
+  a.mali { display: inline-block; padding: 2px 8px; font-size: 13px; border: 1px solid var(--rub); border-radius: 4px; text-decoration: none; color: inherit; white-space: nowrap; background: #fff; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  th { background: var(--siva); font-weight: 600; position: sticky; top: 0; }
+  tr.klik:hover { background: #eef5fc; cursor: pointer; }
+  td.br, th.br { text-align: right; white-space: nowrap; }
+  .polja { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 16px; margin-bottom: 14px; }
+  .polja label { display: flex; flex-direction: column; font-size: 13px; color: #4b5563; gap: 3px; }
+  .polja label.sirok { grid-column: 1 / -1; }
+  .okvir { border: 1px solid var(--rub); border-radius: 6px; padding: 12px; margin-bottom: 14px; }
+  .status { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 13px; background: #fef3c7; }
+  .status.stiglo { background: #dbeafe; }
+  .status.preuzeto { background: #dcfce7; }
+  .status.otkazano { background: #fee2e2; text-decoration: line-through; }
+  .znacka { display: inline-block; padding: 0 6px; border-radius: 8px; font-size: 12px; background: #dcfce7; color: #166534; margin-left: 4px; }
+  .znacka.crvena { background: #fee2e2; color: #991b1b; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 50; display: flex; align-items: center; justify-content: center; }
+  .modal-okvir { background: #fff; border-radius: 10px; padding: 16px; width: min(1100px, 95vw); height: 85vh; display: flex; flex-direction: column; }
+  @media print { .modal { display: none; } }
+  .obrazac { page-break-after: always; font-size: 10.5px; line-height: 1.25; }
+  .obrazac h3 { margin: 6px 0; font-size: 14px; }
+  .obrazac table { width: 100%; border-collapse: collapse; }
+  .obrazac th, .obrazac td { border-bottom: 1px solid #999; padding: 1px 3px; vertical-align: top; }
+  .obrazac tr.predmet td { font-weight: 700; border-bottom: 1.2px solid #000; padding-top: 3px; }
+  .obrazac tr, .odrezak, .polja-o { page-break-inside: avoid; }
+  .obrazac .kvc { width: 18px; }
+  .kv { display: inline-block; width: 11px; height: 11px; border: 1.3px solid #000; vertical-align: -2px; font-size: 10px; line-height: 10px; text-align: center; font-weight: 700; }
+  .crta { display: inline-block; border-bottom: 1px solid #000; height: 12px; vertical-align: bottom; }
+  .polja-o { display: grid; grid-template-columns: 1.4fr 1fr; gap: 6px 16px; margin: 5px 0; }
+  .odrezak { border-top: 1.5px dashed #000; margin-top: 10px; padding-top: 6px; position: relative; }
+  .odrezak > span { position: absolute; top: -10px; left: -2px; background: #fff; font-size: 14px; }
+  .logo { float: left; height: 52px; margin-right: 10px; }
+  .logo.mali { height: 38px; }
+  .listic svg { display: block; margin-top: 2px; }
+  .neaktivna { color: #9ca3af; }
+  .zbroj { font-size: 17px; display: flex; gap: 24px; justify-content: flex-end; flex-wrap: wrap; margin: 10px 0; }
+  .prijedlozi { border: 1px solid var(--rub); border-radius: 4px; max-height: 320px; overflow: auto; margin-top: 4px; }
+  .prijedlozi div { padding: 5px 8px; cursor: pointer; border-bottom: 1px solid #f3f4f6; }
+  .prijedlozi div:hover, .prijedlozi div.odabran { background: #eef5fc; }
+  .siv { color: #6b7280; font-size: 13px; }
+  #poruka { position: fixed; bottom: 16px; right: 16px; padding: 10px 16px; border-radius: 6px; color: #fff; display: none; z-index: 10; }
+  #ispis { display: none; }
+  @media print {
+    header, main, #poruka { display: none !important; }
+    #ispis { display: block; font-size: 12px; }
+    #ispis table { margin: 6px 0; }
+    #ispis th { background: none; border-bottom: 1px solid #000; }
+    .listic { page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <b>📚 Narudžbe knjiga</b>
+  <a href="#narudzbe">Narudžbe</a>
+  <a href="#nova">+ Nova narudžba</a>
+  <a href="#predbiljezbe">Predbilježbe <span id="brPred" class="znacka crvena" style="display:none"></span></a>
+  <a href="#stiglo">Stiglo</a>
+  <a href="#nakladnici">Nakladnici</a>
+  <a href="#kompleti">Kompleti</a>
+  <a href="#knjige">Knjige</a>
+  <a href="#rabljene">Rabljene</a>
+  <a href="#statistika">Statistika</a>
+  <a href="#postavke">Postavke</a>
+  <span id="razina" title="Prikaži samo osnovne ili samo srednje škole (narudžbe, nakladnici, kompleti, zbirni popis)">
+    <button data-r="">Sve</button><button data-r="OŠ">Osnovne</button><button data-r="SŠ">Srednje</button></span>
+</header>
+<main id="sadrzaj"></main>
+<div id="ispis"></div>
+<div id="poruka"></div>
+<div id="nadBanner" style="display:none;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:10px 16px;font-size:16px"></div>
+
+<script>
+const S = { skole: [], postavke: {}, statusi: [], godine: [], knjige: [], kompleti: [], filter: {} };
+const $ = (sel, el = document) => el.querySelector(sel);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const kn = v => (Number(v) || 0).toLocaleString('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+const broj = v => parseFloat(String(v).replace(',', '.')) || 0;
+const datum = d => d ? d.split('-').reverse().join('.') + '.' : '';
+const norm = s => String(s || '').toUpperCase();
+
+const RAZINA_PUTOVI = ['/api/narudzbe', '/api/zbirno', '/api/narudzbenica/prijedlog', '/csv/narudzbe', '/csv/zbirno', '/api/platitelj', '/csv/platitelj'];
+const sRazinom = put => S.razina && RAZINA_PUTOVI.includes(put.split('?')[0]) ? put + (put.includes('?') ? '&' : '?') + 'razina=' + encodeURIComponent(S.razina) : put;
+async function api(put, podaci) {
+  if (podaci === undefined) put = sRazinom(put);
+  const r = await fetch(put, podaci === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(podaci) });
+  const j = await r.json();
+  if (!r.ok) { poruka(j.greska || 'Greška', true); throw new Error(j.greska); }
+  return j;
+}
+function poruka(tekst, greska) {
+  const p = $('#poruka');
+  p.textContent = tekst; p.style.background = greska ? 'var(--crvena)' : 'var(--zelena)'; p.style.display = 'block';
+  clearTimeout(p._t); p._t = setTimeout(() => p.style.display = 'none', greska ? 6000 : 2500);
+}
+async function nadogradi(d) {
+  const b = $('#nadBanner'); b.style.display = 'block'; b.textContent = '⏳ Nadograđujem program, pričekajte…';
+  let r;
+  try { r = await api('/api/nadogradnja', d); }
+  catch (e) { b.innerHTML = '❌ Nadogradnja nije uspjela: ' + esc(e.message) + ' (stara verzija radi dalje)'; return; }
+  b.textContent = `⏳ Pokrećem verziju ${r.verzija}…`;
+  for (let i = 0; i < 60; i++) {
+    await new Promise(ok => setTimeout(ok, 1000));
+    try { const j = await (await fetch('/api/init')).json(); if (j.verzija === r.verzija) return location.reload(); } catch (e) { }
+  }
+  b.textContent = 'Program se nije ponovno pokrenuo. Pokrenite ga ikonom "Narudžbe knjiga" na radnoj površini.';
+}
+async function provjeriNadogradnju() {
+  try {
+    const r = await (await fetch('/api/nadogradnja')).json();
+    const b = $('#nadBanner');
+    if (!r.dostupna) return;
+    b.innerHTML = `🆕 Pronađena je nova verzija programa <b>${esc(r.dostupna.verzija)}</b> (${esc(r.dostupna.ime)}). <button class="glavni" id="nadSad">Nadogradi sad</button>`;
+    b.style.display = 'block';
+    $('#nadSad').onclick = () => nadogradi(r.dostupna.github ? { github: true } : {});
+  } catch (e) { }
+}
+async function ucitajOsnovno() {
+  Object.assign(S, await api('/api/init'));
+  provjeriNadogradnju();
+  osvjeziBrojPred();
+  S.knjige = await api('/api/knjige');
+  S.kompleti = await api('/api/kompleti');
+}
+const knjigaPoId = id => S.knjige.find(k => k.id === id);
+const skolaOpcije = (odabrana, prazna = '— škola —') =>
+  `<option value="">${prazna}</option>` + S.skole.filter(s => !S.razina || s.tip === S.razina || s.id == odabrana).map(s => `<option value="${s.id}" ${s.id == odabrana ? 'selected' : ''}>${esc(s.naziv)}</option>`).join('');
+const statusOpcije = (odabran, prazna) =>
+  (prazna ? `<option value="">${prazna}</option>` : '') + S.statusi.map(s => `<option ${s === odabran ? 'selected' : ''}>${s}</option>`).join('');
+const godinaOpcije = odabrana => '<option value="">sve godine</option>' + S.godine.map(g => `<option ${g == odabrana ? 'selected' : ''}>${g}</option>`).join('');
+
+async function novaSkola(select) {
+  const naziv = prompt('Naziv nove škole:');
+  if (!naziv) { select.value = ''; return; }
+  const { id } = await api('/api/skola', { naziv });
+  await ucitajOsnovno();
+  select.innerHTML = skolaOpcije(id) + '<option value="+">+ nova škola…</option>';
+}
+
+/* Pretraga knjiga: katalog (naziv/barkod), a ako nema - Vulpes */
+function trazilica(input, kutija, odabrano, { vulpes = true, katalog = true } = {}) {
+  let lista = [], i = -1;
+  const crtaj = () => {
+    kutija.innerHTML = lista.map((r, n) => `<div class="${n === i ? 'odabran' : ''}" data-n="${n}">
+      ${r.izvor === 'vulpes' ? '<span class="status">Vulpes</span> ' : ''}${esc(r.naziv)}
+      <span class="siv">${esc(r.nakladnik || '')} ${esc(r.barkod || '')} · ${kn(r.cijena)}${r.izvor === 'vulpes' ? ' · stanje ' + r.stanje : ''}</span></div>`).join('');
+    kutija.style.display = lista.length ? '' : 'none';
+  };
+  const odaberi = r => { input.value = ''; lista = []; crtaj(); odabrano(r); };
+  input.addEventListener('input', () => {
+    const q = norm(input.value.trim());
+    if (q.length < 2 || !katalog) { lista = []; return crtaj(); }
+    const rijeci = q.split(/\s+/);
+    lista = S.knjige.filter(k => k.aktivna && (k.barkod === q || rijeci.every(w => norm(k.naziv + ' ' + k.autori + ' ' + k.nakladnik).includes(w)))).slice(0, 40);
+    i = lista.length ? 0 : -1; crtaj();
+  });
+  input.addEventListener('keydown', async e => {
+    if (e.key === 'ArrowDown') { i = Math.min(i + 1, lista.length - 1); crtaj(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { i = Math.max(i - 1, 0); crtaj(); e.preventDefault(); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (i >= 0 && lista[i]) return odaberi(lista[i]);
+      const q = input.value.trim();
+      if (vulpes && q) {
+        try { lista = (await api('/api/vulpes/trazi?q=' + encodeURIComponent(q))).map(v => ({ ...v, izvor: 'vulpes' })); } catch { return; }
+        if (!lista.length) poruka('Nema u katalogu ni u Vulpesu: ' + q, true);
+        if (lista.length === 1 && /^\d{8,}$/.test(q)) return odaberi(lista[0]);
+        i = 0; crtaj();
+      }
+    } else if (e.key === 'Escape') { lista = []; crtaj(); }
+  });
+  kutija.addEventListener('click', e => { const d = e.target.closest('[data-n]'); if (d) odaberi(lista[+d.dataset.n]); });
+  kutija.style.display = 'none';
+  if (katalog) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'mali'; b.textContent = '📋 Otvori cijeli popis'; b.style.marginTop = '4px';
+    b.onclick = () => cijeliPopis(odabrano, $('#skola') && $('#razred') && $('#skola').value && $('#skola').value !== '+'
+      ? { skola: $('#skola').value, razred: $('#razred').value } : null);
+    const s = document.createElement('select');
+    s.style.marginLeft = '6px';
+    s.innerHTML = '<option value="">📚 knjige nakladnika…</option>' +
+      [...new Set(S.knjige.filter(k => k.aktivna).map(k => k.nakladnik).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'hr')).map(n => `<option>${esc(n)}</option>`).join('');
+    s.onchange = () => { if (s.value) { cijeliPopis(odabrano, { nakladnik: s.value, tekst: '', skola: '', razred: '', vrsta: '' }); s.value = ''; } };
+    kutija.after(b, s);
+  }
+}
+
+/* Cijeli popis knjiga – kad se ne zna naziv: filtriranje po školi/razredu, nakladniku, vrsti */
+function cijeliPopis(odabrano, pocetni) {
+  const f = S.cpf || (S.cpf = { tekst: '', skola: '', razred: '', nakladnik: '', vrsta: '' });
+  if (pocetni) Object.assign(f, pocetni);
+  const nakladnici = [...new Set(S.knjige.filter(k => k.aktivna).map(k => k.nakladnik).filter(Boolean))].sort();
+  const vrste = [...new Set(S.knjige.filter(k => k.aktivna).map(k => k.vrsta).filter(Boolean))].sort();
+  const sel = (id, prazno, opcije, v) => `<select id="${id}"><option value="">${prazno}</option>${opcije.map(o => `<option ${o == v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  const o = document.createElement('div');
+  o.className = 'modal';
+  o.innerHTML = `<div class="modal-okvir"><div class="traka"><b>Sve knjige</b>
+      <input id="cpTekst" placeholder="Dio naziva, autora…" value="${esc(f.tekst)}" style="min-width:200px">
+      <select id="cpSkola">${skolaOpcije(f.skola, 'sve škole')}</select>
+      ${sel('cpRazred', 'svi razredi', ['1', '2', '3', '4', '5', '6', '7', '8'], f.razred)}
+      ${sel('cpNakl', 'svi nakladnici', nakladnici, f.nakladnik)}${sel('cpVrsta', 'sve vrste', vrste, f.vrsta)}
+      <div class="desno"><button class="glavni" id="cpZatvori">Gotovo</button></div></div>
+    <p class="siv" id="cpInfo" style="margin:4px 0">Klikni knjigu da je dodaš (može ih se dodati više).</p>
+    <div style="overflow:auto;flex:1"><table><thead><tr><th>Naziv</th><th>Vrsta</th><th>Nakladnik</th><th class="br">Cijena</th></tr></thead><tbody id="cpRedovi"></tbody></table></div></div>`;
+  document.body.appendChild(o);
+  let lista = [];
+  const crtaj = () => {
+    Object.assign(f, { tekst: $('#cpTekst').value, skola: $('#cpSkola').value, razred: $('#cpRazred').value, nakladnik: $('#cpNakl').value, vrsta: $('#cpVrsta').value });
+    let dozvoljene = null;
+    if (f.skola || f.razred) {
+      dozvoljene = new Set(S.kompleti.filter(k => (!f.skola || k.skola_id == f.skola) && (!f.razred || k.razred == f.razred)).flatMap(k => k.knjige));
+    }
+    const rijeci = norm(f.tekst).split(/\s+/).filter(Boolean);
+    lista = S.knjige.filter(k => k.aktivna && (!dozvoljene || dozvoljene.has(k.id)) && (!f.nakladnik || k.nakladnik === f.nakladnik)
+      && (!f.vrsta || k.vrsta === f.vrsta) && rijeci.every(w => norm(k.naziv + ' ' + k.autori + ' ' + k.barkod).includes(w)))
+      .sort((a, b) => a.naziv.localeCompare(b.naziv, 'hr'));
+    $('#cpRedovi').innerHTML = lista.slice(0, 500).map((k, n) => `<tr class="klik" data-n="${n}"><td>${esc(k.naziv)}<br><span class="siv">${esc(k.autori)}</span></td>
+      <td>${esc(k.vrsta)}</td><td>${esc(k.nakladnik)}</td><td class="br">${kn(k.cijena)}</td></tr>`).join('')
+      + (lista.length > 500 ? `<tr><td colspan="4" class="siv">… još ${lista.length - 500}, suzi filter</td></tr>` : '')
+      || '<tr><td colspan="4" class="siv">Nema knjiga za taj filter.</td></tr>';
+    $('#cpInfo').textContent = `${lista.length} knjiga · klikni knjigu da je dodaš (može ih se dodati više)`;
+  };
+  o.querySelectorAll('input,select').forEach(el => el[el.tagName === 'INPUT' ? 'oninput' : 'onchange'] = crtaj);
+  $('#cpRedovi').onclick = e => {
+    const tr = e.target.closest('tr[data-n]'); if (!tr) return;
+    odabrano(lista[+tr.dataset.n]); tr.style.background = '#dcfce7'; tr.cells[0].insertAdjacentHTML('beforeend', ' <b>✓ dodano</b>');
+  };
+  const zatvori = () => { o.remove(); document.removeEventListener('keydown', esc_); };
+  const esc_ = e => { if (e.key === 'Escape') zatvori(); };
+  document.addEventListener('keydown', esc_);
+  $('#cpZatvori').onclick = zatvori;
+  o.onclick = e => { if (e.target === o) zatvori(); };
+  crtaj(); $('#cpTekst').focus();
+}
+
+/* Knjiga iz Vulpesa koja nije u katalogu se doda u katalog */
+async function uKatalog(r) {
+  if (r.izvor !== 'vulpes') return r;
+  const postoji = S.knjige.find(k => k.barkod && k.barkod === r.barkod);
+  if (postoji) return postoji;
+  const { id } = await api('/api/knjiga', { naziv: r.naziv, barkod: r.barkod, cijena: r.cijena, vulpes_sifra: r.sifra, vrsta: '', autori: '', nakladnik: '', aktivna: 1 });
+  S.knjige = await api('/api/knjige');
+  poruka('Dodano u katalog iz Vulpesa: ' + r.naziv);
+  return knjigaPoId(id);
+}
+
+/* ------------------------------------------------ EAN-13 barkod (za očitavanje na blagajni u Vulpesu) */
+function ean13(kod, visina = 30) {
+  kod = String(kod || '').replace(/\D/g, '');
+  if (kod.length !== 13) return '';
+  const L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
+  const G = L.map(x => [...x].map(b => b === '1' ? '0' : '1').reverse().join(''));
+  const R = L.map(x => [...x].map(b => b === '1' ? '0' : '1').join(''));
+  const PAR = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
+  let b = '101';
+  for (let i = 1; i <= 6; i++) b += (PAR[+kod[0]][i - 1] === 'L' ? L : G)[+kod[i]];
+  b += '01010';
+  for (let i = 7; i <= 12; i++) b += R[+kod[i]];
+  b += '101';
+  const m = 1.4, crte = [...b].map((x, i) => x === '1' ? `<rect x="${(i + 9) * m}" width="${m}" height="${visina}"/>` : '').join('');
+  return `<svg width="${113 * m}" height="${visina + 11}" viewBox="0 0 ${113 * m} ${visina + 11}"><rect width="100%" height="100%" fill="#fff"/>${crte}
+    <text x="${56.5 * m}" y="${visina + 10}" font-size="10" text-anchor="middle" font-family="monospace">${kod}</text></svg>`;
+}
+
+/* ------------------------------------------------ Obrazac za narudžbu (prazan, za ispunjavanje rukom) */
+async function ispisObrazaca(ids) {
+  if (!ids.length) return poruka('Označi komplete kvačicom (ili gornjom kvačicom sve).', true);
+  const ks = await api('/api/obrasci?ids=' + ids.join(',')), p = S.postavke, god = `${S.sezona}./${S.sezona + 1}.`;
+  const kv = '<span class="kv"></span>', crta = w => `<span class="crta" style="width:${w}"></span>`;
+  $('#ispis').innerHTML = ks.map(k => {
+    let zadnji = null;
+    const redovi = k.knjige.map(b => {
+      const grupa = b.predmet && b.predmet !== zadnji ? `<tr class="predmet"><td colspan="6">${esc(b.predmet)}</td></tr>` : '';
+      zadnji = b.predmet;
+      return grupa + `<tr><td class="kvc">${kv}</td><td>${esc(b.naziv)}</td><td>${esc(b.autori)}</td><td>${esc(b.vrsta)}</td><td>${esc(b.nakladnik)}</td><td class="br">${kn(b.cijena)}</td></tr>`;
+    }).join('');
+    const uk = k.knjige.reduce((a, b) => a + b.cijena, 0);
+    return `<div class="obrazac">
+      <div style="display:flex;justify-content:space-between"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)} · tel. ${esc(p.telefon)}</div>
+        <div style="text-align:right"><b style="font-size:15px">NARUDŽBA UDŽBENIKA ${god}</b><br>Br. narudžbe: ${crta('70px')}</div></div>
+      <h3>${esc(k.skola || '')} · ${esc(k.razred)}. RAZRED · ${esc(k.naziv)}</h3>
+      <div class="polja-o">
+        <div>Ime i prezime roditelja: ${crta('230px')}</div><div>Mobitel: ${crta('150px')}</div>
+        <div>Ime i prezime učenika: ${crta('235px')}</div><div>Datum: ${crta('160px')}</div></div>
+      <p style="margin:4px 0">Označite ✓ knjige koje naručujete:</p>
+      <table><thead><tr><th>✓</th><th>Naslov</th><th>Autori</th><th>Vrsta</th><th>Nakladnik</th><th class="br">Cijena</th></tr></thead><tbody>${redovi}</tbody></table>
+      <div class="polja-o" style="margin-top:6px">
+        <div>Cijeli komplet: <b>${kn(uk)}</b></div><div>Za označene knjige: ${crta('90px')} €</div>
+        <div>Akontacija: ${kv} NE &nbsp; ${kv} DA, iznos ${crta('70px')} €</div><div>Plaćanje: ${kv} gotovina &nbsp; ${kv} kartica</div>
+        <div>Plaća: ${kv} roditelj &nbsp; ${kv} Grad &nbsp; ${kv} CZSS &nbsp; ${kv} ${crta('70px')}</div><div>Zaprimio: ${crta('150px')}</div></div>
+      ${p.napomena_listic ? `<p style="margin:6px 0"><b>${esc(p.napomena_listic)}</b></p>` : ''}
+      <div class="odrezak"><span>✂</span>
+        <div style="display:flex;justify-content:space-between;gap:12px"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo mali" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b> · tel. ${esc(p.telefon)}<br>POTVRDA O NARUDŽBI udžbenika ${god}<br>
+          ${esc(k.skola || '')} · ${esc(k.razred)}. r. · ${esc(k.naziv)}</div>
+          <div>Br. narudžbe: ${crta('70px')}<br>Kupac: ${crta('150px')}<br>Akontacija: ${crta('70px')} € &nbsp; Datum: ${crta('70px')}</div></div>
+        <div class="siv">Javit ćemo Vam se kad knjige stignu. Ponesite ovu potvrdu.</div></div>
+    </div>`;
+  }).join('');
+  window.print();
+}
+
+/* ------------------------------------------------ Narudžbe */
+async function stranicaNarudzbe() {
+  const f = S.filter;
+  if (f.godina === undefined) f.godina = S.sezona || '';
+  const q = new URLSearchParams({ godina: f.godina || '', status: f.status || '', skola: f.skola || '', platitelj: f.platitelj ?? '*' });
+  const sve = await api(f.nepreuzeto ? '/api/nepreuzeto' : '/api/narudzbe?' + q);
+  $('#sadrzaj').innerHTML = `
+    <h2>Narudžbe</h2>
+    <div class="traka">
+      <input id="trazi" placeholder="Traži kupca, telefon ili broj…" value="${esc(f.tekst || '')}" style="min-width:260px">
+      <select id="fGod">${godinaOpcije(f.godina)}</select>
+      <select id="fStatus">${statusOpcije(f.status, 'svi statusi')}</select>
+      <select id="fSkola">${skolaOpcije(f.skola, 'sve škole')}</select>
+      <select id="fPlat"><option value="*">svi platitelji</option><option value="" ${f.platitelj === '' ? 'selected' : ''}>roditelj (kupac)</option>
+        ${S.platitelji.map(p => `<option ${p === f.platitelj ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>
+      <label title="Stiglo, a kupac nije došao po knjige"><input type="checkbox" id="fNepr" ${f.nepreuzeto ? 'checked' : ''}> ⏰ nepreuzeto &gt; ${esc(S.postavke.podsjetnik_dana)} dana</label>
+      <div class="desno">
+        <button onclick="location.href=sRazinom('/csv/narudzbe?${q}')">Excel (CSV)</button>
+        <button onclick="ispisPopisa()">Ispiši popis</button>
+        <button class="glavni" onclick="location.hash='#nova'">+ Nova narudžba</button>
+      </div>
+    </div>
+    <div class="traka">Označene: <select id="noviStatus">${statusOpcije('stiglo')}</select>
+      <button onclick="promijeniStatus()">Promijeni status</button>
+      <button onclick="ispisListica()">Ispiši listiće</button>
+      <button onclick="obavijestiSve(S.vidljiveNarudzbe.filter(n => oznacene().includes(n.id)))" title="Redom pošalji WhatsApp/SMS svim označenima">📲 Obavijesti označene</button>
+      ${f.platitelj && f.platitelj !== '*' ? `<button class="glavni" id="popisPlat">📄 Popis za ${esc(f.platitelj)}</button>` : ''}
+      <span class="siv" id="info"></span></div>
+    <table><thead><tr><th><input type="checkbox" id="sve"></th><th>Br.</th><th>Datum</th><th>Kupac</th><th>Telefon</th><th>Škola</th><th>Raz.</th>
+      <th class="br">Kom.</th><th class="br">Iznos</th><th class="br">Uplaćeno</th><th class="br">Ostatak</th><th>Status</th><th></th></tr></thead>
+    <tbody id="redovi"></tbody></table>`;
+  const crtaj = () => {
+    const t = norm(f.tekst), rijeci = t.split(/\s+/).filter(Boolean);
+    const vidljive = sve.filter(n => rijeci.every(w => norm(`${n.broj} ${n.kupac} ${n.telefon}`).includes(w)));
+    S.vidljiveNarudzbe = vidljive;
+    $('#redovi').innerHTML = vidljive.map(n => `<tr class="klik" data-id="${n.id}">
+      <td onclick="event.stopPropagation()"><input type="checkbox" class="oznaka" value="${n.id}"></td>
+      <td>${n.broj}</td><td>${datum(n.datum)}</td><td>${esc(n.kupac)}${n.platitelj ? `<span class="znacka">${esc(n.platitelj)}</span>` : ''}</td><td>${esc(n.telefon)}</td><td>${esc(n.skola || '')}</td><td>${esc(n.razred)}</td>
+      <td class="br">${n.komada}</td><td class="br">${kn(n.iznos)}</td><td class="br">${kn(n.akontacija)}</td><td class="br">${kn(n.iznos - n.akontacija)}</td>
+      <td><span class="status ${n.status}">${n.status}</span>${cekaDana(n) >= +S.postavke.podsjetnik_dana ? `<span class="znacka crvena" title="Stiglo ${datum(n.stiglo_datum)}">⏰ ${cekaDana(n)} d</span>` : ''}</td>
+      <td onclick="event.stopPropagation()">${gumbiObavijesti(n, n.iznos - n.akontacija)}</td></tr>`).join('');
+    const uk = vidljive.reduce((a, n) => a + n.iznos, 0);
+    $('#info').textContent = `${vidljive.length} narudžbi · ukupno ${kn(uk)}`;
+  };
+  crtaj();
+  $('#trazi').oninput = e => { f.tekst = e.target.value; crtaj(); };
+  $('#trazi').focus();
+  $('#fGod').onchange = e => { f.godina = e.target.value; stranicaNarudzbe(); };
+  $('#fStatus').onchange = e => { f.status = e.target.value; stranicaNarudzbe(); };
+  $('#fSkola').onchange = e => { f.skola = e.target.value; stranicaNarudzbe(); };
+  $('#fPlat').onchange = e => { f.platitelj = e.target.value; stranicaNarudzbe(); };
+  if ($('#popisPlat')) $('#popisPlat').onclick = () => ispisPlatitelja(f, q);
+  $('#fNepr').onchange = e => { f.nepreuzeto = e.target.checked; stranicaNarudzbe(); };
+  $('#sve').onchange = e => document.querySelectorAll('.oznaka').forEach(c => c.checked = e.target.checked);
+  $('#redovi').onclick = e => { const tr = e.target.closest('tr'); if (tr) location.hash = '#narudzba/' + tr.dataset.id; };
+}
+const oznacene = () => [...document.querySelectorAll('.oznaka:checked')].map(c => +c.value);
+async function promijeniStatus() {
+  const ids = oznacene();
+  if (!ids.length) return poruka('Označi narudžbe kvačicom.', true);
+  await api('/api/narudzbe/status', { ids, status: $('#noviStatus').value });
+  poruka('Status promijenjen za ' + ids.length + ' narudžbi.');
+  stranicaNarudzbe();
+}
+async function ispisListica(ids = oznacene()) {
+  if (!ids.length) return poruka('Označi narudžbe kvačicom.', true);
+  const ns = await Promise.all(ids.map(id => api('/api/narudzba?id=' + id)));
+  const p = S.postavke, da = '<span class="kv">✓</span>', ne = '<span class="kv"></span>', x = b => b ? da : ne;
+  $('#ispis').innerHTML = ns.map(n => {
+    const uk = n.stavke.reduce((a, s) => a + s.cijena * s.kolicina, 0), ost = uk - n.akontacija;
+    const god = `${n.godina}./${n.godina + 1}.`, pl = n.platitelj || '', imaPred = n.stavke.some(s => s.predmet);
+    return `<div class="obrazac listic">
+      <div style="display:flex;justify-content:space-between"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)} · tel. ${esc(p.telefon)}</div>
+        <div style="text-align:right"><b style="font-size:15px">NARUDŽBA UDŽBENIKA br. ${n.broj}/${n.godina}</b><br>šk. god. ${god} · datum ${datum(n.datum)}</div></div>
+      <div class="polja-o" style="margin-top:8px">
+        <div>Kupac (roditelj): <b>${esc(n.kupac)}</b></div><div>Mobitel: <b>${esc(n.telefon)}</b></div>
+        <div>Škola: <b>${esc(n.skola || '')}</b></div><div>Razred: <b>${esc(n.razred)}</b></div></div>
+      <table><thead><tr><th>✓</th>${imaPred ? '<th>Predmet</th>' : ''}<th>Naslov</th><th>Nakladnik</th><th class="br">Kol.</th><th class="br">Cijena</th><th class="br">Iznos</th></tr></thead><tbody>
+      ${n.stavke.map(s => `<tr><td class="kvc">${da}</td>${imaPred ? `<td>${esc(s.predmet || '')}</td>` : ''}<td>${esc(s.naziv)}${ean13(s.barkod, 22)}</td><td>${esc(s.nakladnik)}</td>
+        <td class="br">${s.kolicina}</td><td class="br">${kn(s.cijena)}</td><td class="br">${kn(s.cijena * s.kolicina)}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="polja-o" style="margin-top:6px">
+        <div>Akontacija: ${x(!n.akontacija)} NE &nbsp; ${x(n.akontacija > 0)} DA${n.akontacija > 0 ? `, iznos <b>${kn(n.akontacija)}</b>` : ''}</div>
+        <div style="text-align:right">Ukupno: <b>${kn(uk)}</b> &nbsp; <b>Za platiti: ${kn(ost)}</b></div>
+        <div>Plaćanje: ${x(n.nacin_pl === 'Gotovina')} gotovina &nbsp; ${x(n.nacin_pl === 'Kartica')} kartica &nbsp; ${x(n.nacin_pl === 'Virman')} virman</div>
+        <div>Plaća: ${x(!pl)} roditelj &nbsp; ${x(pl === 'Grad')} Grad &nbsp; ${x(pl === 'CZSS')} CZSS ${pl && !['Grad', 'CZSS'].includes(pl) ? `&nbsp; ${da} ${esc(pl)}` : ''}</div></div>
+      ${n.napomena ? `<p style="margin:4px 0">Napomena: ${esc(n.napomena)}</p>` : ''}
+      ${p.napomena_listic ? `<p style="margin:4px 0"><b>${esc(p.napomena_listic)}</b></p>` : ''}
+      <div class="polja-o" style="margin-top:14px"><div>Potpis kupca: <span class="crta" style="width:170px"></span></div><div>Zaprimio: <span class="crta" style="width:150px"></span></div></div>
+      <div class="odrezak"><span>✂</span>
+        <div style="display:flex;justify-content:space-between;gap:12px"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo mali" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b> · tel. ${esc(p.telefon)}<br>
+          <b>POTVRDA O NARUDŽBI br. ${n.broj}/${n.godina}</b> · ${datum(n.datum)}<br>${esc(n.kupac)} · ${esc(n.skola || '')} ${esc(n.razred)}. r.</div>
+          <div style="text-align:right">Knjiga: ${n.stavke.reduce((a, s) => a + s.kolicina, 0)} · ukupno ${kn(uk)}<br>Akontacija: <b>${kn(n.akontacija)}</b><br><b>Za platiti: ${kn(ost)}</b></div></div>
+        <div class="siv">Javit ćemo Vam se kad knjige stignu. Ponesite ovu potvrdu.</div></div>
+    </div>`;
+  }).join('');
+  window.print();
+}
+function ispisPopisa() {
+  const ns = S.vidljiveNarudzbe || [];
+  $('#ispis').innerHTML = `<h3>Popis narudžbi (${ns.length})</h3><table><thead><tr><th>Br.</th><th>Datum</th><th>Kupac</th><th>Telefon</th><th>Škola</th><th>Raz.</th><th class="br">Iznos</th><th class="br">Ostatak</th><th>Status</th></tr></thead><tbody>
+    ${ns.map(n => `<tr><td>${n.broj}</td><td>${datum(n.datum)}</td><td>${esc(n.kupac)}</td><td>${esc(n.telefon)}</td><td>${esc(n.skola || '')}</td><td>${esc(n.razred)}</td><td class="br">${kn(n.iznos)}</td><td class="br">${kn(n.iznos - n.akontacija)}</td><td>${n.status}</td></tr>`).join('')}</tbody></table>`;
+  window.print();
+}
+
+/* ------------------------------------------------ Jedna narudžba */
+async function stranicaNarudzba(id) {
+  const n = id ? await api('/api/narudzba?id=' + id) : { kupac: '', telefon: '', skola_id: '', razred: '', akontacija: 0, nacin_pl: '', napomena: '', status: 'naručeno', stavke: [] };
+  $('#sadrzaj').innerHTML = `
+    <h2>${id ? `Narudžba br. ${n.broj}/${n.godina} <span class="siv">${datum(n.datum)}</span>` : 'Nova narudžba'}</h2>
+    <div class="polja">
+      <label>Kupac (ime i prezime)<input id="kupac" value="${esc(n.kupac)}"></label>
+      <label>Telefon<input id="telefon" value="${esc(n.telefon)}"><span id="kupacPrijedlog"></span></label>
+      <label>Škola<select id="skola">${skolaOpcije(n.skola_id)}<option value="+">+ nova škola…</option></select></label>
+      <label>Razred<select id="razred">${['', '1', '2', '3', '4', '5', '6', '7', '8'].map(r => `<option ${r == n.razred ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+    </div>
+    <div class="okvir">
+      <div class="traka"><b>Dodaj komplet:</b> <select id="komplet" style="min-width:280px"></select>
+        <span class="siv" id="kSavjet">Prvo odaberi školu i razred – ponude se samo njihovi kompleti.</span></div>
+      <div id="kKnjige"></div>
+      <div><b>Dodaj knjigu:</b> <input id="traziKnjigu" placeholder="Naziv, autor ili barkod (čitač) pa Enter…" style="width:100%;margin-top:4px">
+        <div class="prijedlozi" id="prijedlozi"></div></div>
+    </div>
+    <table><thead><tr><th>#</th><th>Naziv</th><th>Nakladnik</th><th class="br">Kol.</th><th class="br">Stiglo</th><th class="br">Cijena</th><th class="br">Iznos</th><th></th></tr></thead><tbody id="stavke"></tbody></table>
+    <div class="zbroj"><span>Ukupno: <b id="ukupno"></b></span>
+      <label>Uplaćeno (akontacija): <input id="akontacija" value="${n.akontacija || ''}" style="width:90px;text-align:right"> €</label>
+      <span>Za platiti: <b id="ostatak"></b></span></div>
+    <div class="polja">
+      <label>Način plaćanja<select id="nacin_pl">${['', 'Gotovina', 'Kartica', 'Virman'].map(v => `<option ${v === n.nacin_pl ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      <label>Status<select id="status">${statusOpcije(n.status)}</select></label>
+      <label>Plaća<input id="platitelj" list="platitelji" value="${esc(n.platitelj || '')}" placeholder="roditelj (prazno)">
+        <datalist id="platitelji">${[...new Set(['Grad', 'CZSS', 'Županija', ...S.platitelji])].map(p => `<option value="${esc(p)}">`).join('')}</datalist></label>
+      <label class="sirok">Napomena<textarea id="napomena">${esc(n.napomena)}</textarea></label>
+    </div>
+    <div class="traka">
+      <button class="glavni" onclick="spremiNarudzbu()">Spremi</button>
+      <button class="glavni" onclick="spremiNarudzbu(true)">Spremi i ispiši</button>
+      <button onclick="history.back()">Odustani</button>
+      ${id ? `<span id="obavijest"></span>` : ''}
+      ${id ? '<div class="desno"><button class="opasno" onclick="obrisiNarudzbu()">Obriši narudžbu</button></div>' : ''}
+    </div>`;
+  S.n = n;
+  api('/api/rabljene?status=' + encodeURIComponent('na stanju')).then(r => { S.rabljeneStanje = r; crtajStavke(); });
+  $('#telefon').onblur = async () => {
+    if (id || $('#kupac').value.trim() && $('#skola').value) return;
+    const l = await api('/api/kupac?telefon=' + encodeURIComponent($('#telefon').value));
+    $('#kupacPrijedlog').innerHTML = l.map((r, i) => `<a class="mali" href="#" data-i="${i}">↳ ${esc(r.kupac)} · ${esc(r.skola || '')} ${esc(r.razred)}. r. (${r.godina})</a>`).join(' ');
+    $('#kupacPrijedlog').onclick = e => {
+      const r = l[e.target.dataset.i]; if (!r) return; e.preventDefault();
+      if (!$('#kupac').value.trim()) $('#kupac').value = r.kupac;
+      if (r.skola_id) $('#skola').value = r.skola_id;
+      // novi razred: ako je kupio prošle godine, sad je razred više
+      const raz = +r.razred ? String(+r.razred + (r.godina < S.sezona ? S.sezona - r.godina : 0)) : r.razred;
+      if ([...$('#razred').options].some(o => o.value === raz)) $('#razred').value = raz;
+      $('#kupacPrijedlog').innerHTML = ''; osvjeziKomplete();
+    };
+  };
+  const osvjeziKomplete = () => {
+    const sk = $('#skola').value, raz = $('#razred').value;
+    const ks = S.kompleti.filter(k => (!sk || k.skola_id == sk) && (!raz || k.razred == raz));
+    $('#komplet').innerHTML = `<option value="">— odaberi komplet / smjer (${ks.length}) —</option>` +
+      ks.map(k => `<option value="${k.id}">${esc(k.naziv)} · ${esc(k.skola || '')} · ${esc(k.razred)}. r. (${k.knjige.length} knj.)</option>`).join('');
+    $('#kKnjige').innerHTML = '';
+    $('#kSavjet').textContent = sk && raz ? (ks.length ? (ks.length > 1 ? 'Odaberi smjer.' : '') : 'Za ovu školu i razred nema kompleta.')
+      : 'Prvo odaberi školu i razred – ponude se samo njihovi kompleti.';
+    if (sk && raz && ks.length === 1 && !S.n.stavke.length) { $('#komplet').value = ks[0].id; prikaziKomplet(ks[0]); }
+  };
+  // knjige kompleta s kvačicama (kao papirnati obrazac): odznači što kupac ne treba pa "Dodaj označene"
+  const prikaziKomplet = k => {
+    const knj = k.knjige.map(knjigaPoId).filter(Boolean), ima = id => S.n.stavke.some(s => s.knjiga_id === id);
+    $('#kSavjet').textContent = '';
+    $('#kKnjige').innerHTML = `<div style="margin-top:8px"><b>${esc(k.naziv)}</b> <span class="siv">– odznači knjige koje kupac ne treba</span>
+      <label style="margin-left:10px"><input type="checkbox" id="kSve" checked> sve</label>
+      <table style="margin-top:4px"><tbody>${knj.map(b => `<tr><td style="width:24px"><input type="checkbox" class="kKnj" value="${b.id}" ${ima(b.id) ? 'disabled' : 'checked'}></td>
+        <td>${esc(b.naziv)}${ima(b.id) ? ' <span class="siv">(već dodano)</span>' : ''}</td><td>${esc(b.vrsta)}</td><td>${esc(b.nakladnik)}</td><td class="br">${kn(b.cijena)}</td></tr>`).join('')}</tbody></table>
+      <div class="traka" style="margin-top:6px"><button class="glavni" id="kDodaj">Dodaj označene</button><button id="kOdustani">Zatvori</button></div></div>`;
+    $('#kSve').onchange = e => document.querySelectorAll('.kKnj:not(:disabled)').forEach(c => c.checked = e.target.checked);
+    $('#kOdustani').onclick = () => { $('#kKnjige').innerHTML = ''; $('#komplet').value = ''; };
+    $('#kDodaj').onclick = () => {
+      document.querySelectorAll('.kKnj:checked:not(:disabled)').forEach(c => dodajStavku(knjigaPoId(+c.value)));
+      $('#kKnjige').innerHTML = ''; $('#komplet').value = '';
+    };
+  };
+  osvjeziKomplete();
+  $('#skola').onchange = async e => { if (e.target.value === '+') await novaSkola(e.target); osvjeziKomplete(); };
+  $('#razred').onchange = osvjeziKomplete;
+  $('#komplet').onchange = e => {
+    const k = S.kompleti.find(k => k.id == e.target.value);
+    if (!k) return;
+    if (!$('#skola').value && k.skola_id) $('#skola').value = k.skola_id;
+    if (!$('#razred').value && k.razred) $('#razred').value = k.razred;
+    prikaziKomplet(k);
+  };
+  $('#akontacija').oninput = crtajStavke;
+  if (id) $('#obavijest').innerHTML = 'Obavijesti kupca: ' + gumbiObavijesti(n, n.stavke.reduce((a, s) => a + s.cijena * s.kolicina, 0) - n.akontacija);
+  trazilica($('#traziKnjigu'), $('#prijedlozi'), async r => dodajStavku(await uKatalog(r)));
+  crtajStavke();
+  $('#kupac').focus();
+}
+function dodajStavku(k) {
+  const postoji = S.n.stavke.find(s => s.knjiga_id && s.knjiga_id === k.id);
+  if (postoji) postoji.kolicina++;
+  else S.n.stavke.push({ knjiga_id: k.id, naziv: k.naziv, barkod: k.barkod, nakladnik: k.nakladnik, cijena: k.cijena, kolicina: 1 });
+  crtajStavke();
+}
+function crtajStavke() {
+  const st = S.n.stavke;
+  const rab = s => (S.rabljeneStanje || []).filter(r => (s.barkod && r.barkod === s.barkod) || (s.knjiga_id && r.knjiga_id === s.knjiga_id) || norm(r.naziv) === norm(s.naziv));
+  const znackaRab = s => { const r = rab(s); return r.length ? `<span class="znacka" title="Rabljeni primjerci na stanju">♻ ${r.length} rabljen${r.length > 1 ? 'e' : 'a'} (${r.map(x => kn(x.prodajna_cijena)).join(', ')})</span>` : ''; };
+  $('#stavke').innerHTML = st.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.naziv)}${znackaRab(s)}</td><td>${esc(s.nakladnik)}</td>
+    <td class="br"><input type="number" min="1" value="${s.kolicina}" style="width:60px" onchange="S.n.stavke[${i}].kolicina=+this.value||1;crtajStavke()"></td>
+    <td class="br"><input type="number" min="0" max="${s.kolicina}" value="${s.stiglo || 0}" style="width:55px;${(s.stiglo || 0) >= s.kolicina ? 'background:#dcfce7' : ''}" onchange="S.n.stavke[${i}].stiglo=Math.min(+this.value||0,S.n.stavke[${i}].kolicina);crtajStavke()"></td>
+    <td class="br"><input value="${s.cijena}" style="width:80px;text-align:right" onchange="S.n.stavke[${i}].cijena=broj(this.value);crtajStavke()"></td>
+    <td class="br">${kn(s.cijena * s.kolicina)}</td>
+    <td><button class="mali opasno" onclick="S.n.stavke.splice(${i},1);crtajStavke()">✕</button></td></tr>`).join('')
+    || '<tr><td colspan="8" class="siv">Još nema knjiga. Odaberi komplet ili potraži knjigu.</td></tr>';
+  const uk = st.reduce((a, s) => a + s.cijena * s.kolicina, 0);
+  $('#ukupno').textContent = kn(uk);
+  $('#ostatak').textContent = kn(uk - broj($('#akontacija').value));
+}
+async function spremiNarudzbu(ispisi) {
+  const sk = $('#skola').value;
+  const d = { ...S.n, kupac: $('#kupac').value, telefon: $('#telefon').value, skola_id: sk && sk !== '+' ? +sk : null,
+    razred: $('#razred').value, akontacija: broj($('#akontacija').value), nacin_pl: $('#nacin_pl').value,
+    status: $('#status').value, napomena: $('#napomena').value, platitelj: $('#platitelj').value };
+  const { id } = await api('/api/narudzba', d);
+  poruka('Narudžba spremljena.');
+  ({ godine: S.godine, platitelji: S.platitelji } = await api('/api/init'));
+  if (ispisi) await ispisListica([id]);
+  location.hash = '#narudzbe';
+}
+async function obrisiNarudzbu() {
+  if (!confirm('Sigurno obrisati ovu narudžbu?')) return;
+  await api('/api/narudzba/obrisi', { id: S.n.id });
+  poruka('Narudžba obrisana.');
+  location.hash = '#narudzbe';
+}
+
+/* ------------------------------------------------ Zbirni popis (za naručivanje od nakladnika) */
+async function stranicaZbirno() {
+  const f = S.zf || (S.zf = { godina: S.sezona || '', status: 'naručeno', skola: '' });
+  const q = new URLSearchParams(f);
+  const z = await api('/api/zbirno?' + q);
+  const nakladnici = [...new Set(z.map(r => r.nakladnik))];
+  const tablica = () => nakladnici.map(nak => {
+    const r = z.filter(x => x.nakladnik === nak);
+    return `<tr><th colspan="5">${esc(nak || 'bez nakladnika')} <span class="siv">(${r.reduce((a, x) => a + x.kolicina, 0)} kom)</span></th></tr>` +
+      r.map(x => `<tr><td>${esc(x.naziv)}</td><td>${esc(x.barkod)}</td><td class="br"><b>${x.kolicina}</b></td><td class="br">${kn(x.cijena)}</td><td class="br siv">${x.narudzbi} nar.</td></tr>`).join('');
+  }).join('');
+  $('#sadrzaj').innerHTML = `
+    <h2>Zbirni popis knjiga</h2>
+    <p class="siv">Koliko kojih knjiga treba, po nakladniku. Za naručivanje od nakladnika ili pripremu za školu.</p>
+    <div class="traka">
+      <select id="zGod">${godinaOpcije(f.godina)}</select>
+      <select id="zStatus">${statusOpcije(f.status, 'svi statusi')}</select>
+      <select id="zSkola">${skolaOpcije(f.skola, 'sve škole')}</select>
+      <div class="desno"><button onclick="location.href=sRazinom('/csv/zbirno?${q}')">Excel (CSV)</button><button onclick="window.print()">Ispiši</button></div>
+    </div>
+    <table><thead><tr><th>Naziv</th><th>Barkod</th><th class="br">Količina</th><th class="br">Cijena</th><th></th></tr></thead><tbody>${tablica()}</tbody></table>`;
+  $('#ispis').innerHTML = `<h3>Zbirni popis · ${esc(f.status || 'svi statusi')} · ${esc(f.godina || '')}</h3><table>${tablica()}</table>`;
+  for (const [id, k] of [['zGod', 'godina'], ['zStatus', 'status'], ['zSkola', 'skola']])
+    $('#' + id).onchange = e => { f[k] = e.target.value; stranicaZbirno(); };
+}
+
+/* ------------------------------------------------ Kompleti */
+function stranicaKompleti() {
+  $('#sadrzaj').innerHTML = `
+    <h2>Kompleti</h2>
+    <div class="traka"><select id="kSkola">${skolaOpcije(S.kf, 'sve škole')}</select>
+      <button id="kObrasci" title="Prazni obrasci za narudžbu (roditelj, mobitel, akontacija, kvačice za knjige)">🖨 Ispiši obrasce za označene</button>
+      <div class="desno"><button class="glavni" onclick="location.hash='#ucitaj-popis'">📄 Učitaj popis škole (PDF/Word/Excel)</button><button onclick="$('#uvozOkvir').style.display=''">Uvoz iz predloška</button><button class="glavni" onclick="urediKomplet()">+ Novi komplet</button></div></div>
+    <div class="okvir" id="uvozOkvir" style="display:none">
+      <b>Uvoz popisa knjiga po školama</b>
+      <p class="siv">Excel (.xlsx) ili CSV sa stupcima: Škola, Smjer, Razred, Barkod, Naziv, Nakladnik, Cijena – jedan red po knjizi.
+        Kompleti se naprave sami; ako komplet (škola + smjer + razred) već postoji, njegov popis se <b>zamijeni</b> novim.
+        Knjige se traže po barkodu (i u Vulpesu), pa po nazivu; ako ih nema, dodaju se.</p>
+      <div class="traka"><input type="file" id="uvozDatoteka" accept=".xlsx,.csv,.txt"><button class="glavni" id="uvozi">Uvezi</button>
+        <a href="/csv/predlozak">Preuzmi predložak</a></div></div>
+    ${S.kompleti_stari ? `<p class="siv">${S.kompleti_stari} kompleta još ima popis iz prošle sezone (žuto) – osvježi ih kad škole objave nove popise.</p>` : ''}
+    <table><thead><tr><th><input type="checkbox" id="sve"></th><th>Škola</th><th>Razred</th><th>Komplet / smjer</th><th class="br">Knjiga</th><th class="br">Cijena</th><th>Popis za</th></tr></thead><tbody id="redovi"></tbody></table>`;
+  const crtaj = () => {
+    const tipSkole = id => (S.skole.find(s => s.id == id) || {}).tip;
+    $('#redovi').innerHTML = S.kompleti.filter(k => (!S.kf || k.skola_id == S.kf) && (!S.razina || tipSkole(k.skola_id) === S.razina)).map(k => {
+      const cij = k.knjige.map(knjigaPoId).filter(Boolean).reduce((a, x) => a + x.cijena, 0);
+      const star = (k.azurirano || 0) < S.sezona;
+      return `<tr class="klik" style="${star ? 'background:#fef9c3' : ''}" onclick="urediKomplet(${k.id})"><td onclick="event.stopPropagation()"><input type="checkbox" class="oznaka" value="${k.id}"></td><td>${esc(k.skola || '')}</td><td>${esc(k.razred)}</td><td>${esc(k.naziv)}</td><td class="br">${k.knjige.length}</td><td class="br">${kn(cij)}</td><td>${k.azurirano || ''}${star ? ' (stari)' : ''}</td></tr>`;
+    }).join('');
+  };
+  $('#kSkola').onchange = e => { S.kf = e.target.value; crtaj(); };
+  $('#sve').onchange = e => document.querySelectorAll('.oznaka').forEach(c => c.checked = e.target.checked);
+  $('#kObrasci').onclick = () => ispisObrazaca(oznacene());
+  $('#uvozi').onclick = async () => {
+    const f = $('#uvozDatoteka').files[0];
+    if (!f) return poruka('Odaberi datoteku.', true);
+    const b = new Uint8Array(await f.arrayBuffer());
+    let bin = ''; for (let i = 0; i < b.length; i += 8192) bin += String.fromCharCode(...b.subarray(i, i + 8192));
+    const r = await api('/api/uvoz/kompleti', { ime: f.name, sadrzaj: btoa(bin) });
+    await ucitajOsnovno();
+    poruka(`Uvezeno: ${r.kompleta} kompleta, ${r.knjiga} stavki, ${r.novih_knjiga} novih knjiga.`);
+    stranicaKompleti();
+  };
+  crtaj();
+}
+function urediKomplet(id) {
+  const k = id ? { ...S.kompleti.find(x => x.id === id) } : { naziv: '', skola_id: S.kf || '', razred: '', knjige: [] };
+  k.knjige = [...k.knjige];
+  $('#sadrzaj').innerHTML = `
+    <h2>${id ? 'Uredi komplet' : 'Novi komplet'}</h2>
+    <div class="polja">
+      <label>Naziv (smjer)<input id="kNaziv" value="${esc(k.naziv)}"></label>
+      <label>Škola<select id="kSkola">${skolaOpcije(k.skola_id)}<option value="+">+ nova škola…</option></select></label>
+      <label>Razred<input id="kRazred" value="${esc(k.razred)}"></label>
+    </div>
+    <div class="okvir"><b>Dodaj knjigu:</b> <input id="traziKnjigu" placeholder="Naziv ili barkod pa Enter…" style="width:100%;margin-top:4px"><div class="prijedlozi" id="prijedlozi"></div></div>
+    <table><thead><tr><th>Naziv</th><th>Nakladnik</th><th class="br">Cijena</th><th></th></tr></thead><tbody id="kKnjige"></tbody></table>
+    <div class="traka" style="margin-top:12px"><button class="glavni" id="kSpremi">Spremi</button><button onclick="stranicaKompleti()">Odustani</button>
+      ${id ? '<div class="desno"><button class="opasno" id="kObrisi">Obriši komplet</button></div>' : ''}</div>`;
+  const crtaj = () => {
+    $('#kKnjige').innerHTML = k.knjige.map((kid, i) => {
+      const x = knjigaPoId(kid) || { naziv: '?', nakladnik: '', cijena: 0 };
+      return `<tr><td>${esc(x.naziv)}</td><td>${esc(x.nakladnik)}</td><td class="br">${kn(x.cijena)}</td><td><button class="mali opasno" data-i="${i}">✕</button></td></tr>`;
+    }).join('');
+  };
+  $('#kKnjige').onclick = e => { if (e.target.dataset.i) { k.knjige.splice(+e.target.dataset.i, 1); crtaj(); } };
+  $('#kSkola').onchange = e => { if (e.target.value === '+') novaSkola(e.target); };
+  trazilica($('#traziKnjigu'), $('#prijedlozi'), async r => { const x = await uKatalog(r); if (!k.knjige.includes(x.id)) k.knjige.push(x.id); crtaj(); });
+  $('#kSpremi').onclick = async () => {
+    const sk = $('#kSkola').value;
+    await api('/api/komplet', { id: k.id, naziv: $('#kNaziv').value, skola_id: sk && sk !== '+' ? +sk : null, razred: $('#kRazred').value, knjige: k.knjige });
+    S.kompleti = await api('/api/kompleti'); poruka('Komplet spremljen.'); stranicaKompleti();
+  };
+  if (id) $('#kObrisi').onclick = async () => {
+    if (!confirm('Obrisati komplet? Narudžbe ostaju.')) return;
+    await api('/api/komplet/obrisi', { id }); S.kompleti = await api('/api/kompleti'); stranicaKompleti();
+  };
+  crtaj();
+}
+
+/* ------------------------------------------------ Učitavanje popisa škole (PDF / Word / Excel) */
+async function datotekaBase64(f) {
+  const b = new Uint8Array(await f.arrayBuffer());
+  let bin = ''; for (let i = 0; i < b.length; i += 8192) bin += String.fromCharCode(...b.subarray(i, i + 8192));
+  return btoa(bin);
+}
+function stranicaUcitajPopis() {
+  $('#sadrzaj').innerHTML = `
+    <h2>Učitaj popis udžbenika škole</h2>
+    <p class="siv">Preuzmi popis sa stranice škole (PDF, Word .docx ili Excel .xlsx) i učitaj ga ovdje. Program prepozna smjerove, razrede i knjige
+      i ponudi odgovarajuće knjige iz našeg popisa ili iz Vulpesa. Sve pregledaj i ispravi prije spremanja.</p>
+    <div class="okvir"><div class="traka">
+      <label>Škola: <select id="pSkola">${skolaOpcije(S.pSkola)}<option value="+">+ nova škola…</option></select></label>
+      <input type="file" id="pDatoteke" multiple accept=".pdf,.docx,.xlsx,.csv,.txt">
+      <button class="glavni" id="pProcitaj">Pročitaj popis</button></div></div>
+    <div id="pRezultat"></div>`;
+  $('#pSkola').onchange = async e => { if (e.target.value === '+') await novaSkola(e.target); S.pSkola = e.target.value; };
+  $('#pProcitaj').onclick = async () => {
+    const dat = [...$('#pDatoteke').files];
+    if (!dat.length) return poruka('Odaberi datoteku s popisom.', true);
+    $('#pRezultat').innerHTML = '<p>Čitam popis…</p>';
+    let sekcije = [], vulpes = true;
+    for (const f of dat) {
+      try {
+        const r = await api('/api/popis/analiziraj', { ime: f.name, sadrzaj: await datotekaBase64(f) });
+        vulpes = vulpes && r.vulpes;
+        sekcije.push(...r.sekcije.map(x => ({ ...x, datoteka: f.name })));
+      } catch (e) { $('#pRezultat').innerHTML = `<p>${esc(f.name)}: ${esc(e.message)}</p>`; return; }
+    }
+    S.popis = sekcije.map(sek => ({ ...sek, ukljuci: true, stavke: sek.stavke.map(st => {
+      const p = st.prijedlozi[0];
+      return { ...st, ukljuci: true, izbor: p && p.ocjena >= 0.6 ? p : { tip: 'n', naziv: st.naslov } };
+    }) }));
+    crtajPopis(vulpes);
+  };
+}
+const opisIzbora = p => p.tip === 'n' ? `+ nova knjiga: ${p.naziv}` :
+  `${p.tip === 'v' ? 'Vulpes' : 'Katalog'}: ${p.naziv} · ${kn(p.cijena)}${p.ocjena !== undefined ? ` (${Math.round(p.ocjena * 100)}%)` : ''}`;
+function crtajPopis(vulpes) {
+  const ukupno = S.popis.reduce((a, s) => a + s.stavke.length, 0);
+  if (!ukupno) { $('#pRezultat').innerHTML = '<p>U datoteci nisam prepoznao nijednu knjigu. Pošalji je Claudeu da pogleda.</p>'; return; }
+  $('#pRezultat').innerHTML = `
+    ${vulpes ? '' : '<p class="siv">Vulpes nije povezan (Postavke), pa se knjige traže samo u našem popisu.</p>'}
+    <p>Prepoznato <b>${S.popis.length}</b> kompleta i <b>${ukupno}</b> knjiga. Žuti redovi su nesigurni – provjeri ih.
+      Ako je komplet s istom školom, smjerom i razredom već postojao, njegov popis knjiga se zamijeni.</p>
+    ${S.popis.map((sek, si) => `<div class="okvir">
+      <div class="traka"><label><input type="checkbox" data-sek="${si}" class="pSekUk" ${sek.ukljuci ? 'checked' : ''}> spremi</label>
+        <label>Smjer <input class="pSmjer" data-sek="${si}" value="${esc(sek.smjer)}" style="min-width:280px"></label>
+        <label>Razred <input class="pRazred" data-sek="${si}" value="${esc(sek.razred)}" style="width:50px"></label>
+        <span class="siv">${esc(sek.datoteka)}</span></div>
+      <table><thead><tr><th></th><th>Šifra</th><th>Na popisu škole</th><th>Knjiga u programu</th><th></th></tr></thead><tbody>
+      ${sek.stavke.map((st, i) => {
+        const nesig = st.izbor.tip === 'n' || (st.izbor.ocjena ?? 1) < 0.8;
+        const opcije = [...st.prijedlozi, ...(st.izbor.trazeno ? [st.izbor] : []), { tip: 'n', naziv: st.naslov }];
+        const odabran = opcije.findIndex(o => o === st.izbor || (o.tip === st.izbor.tip && (o.id ?? o.sifra ?? o.naziv) === (st.izbor.id ?? st.izbor.sifra ?? st.izbor.naziv)));
+        return `<tr style="${nesig ? 'background:#fef9c3' : ''}">
+        <td><input type="checkbox" class="pUk" data-sek="${si}" data-i="${i}" ${st.ukljuci ? 'checked' : ''}></td>
+        <td>${esc(st.sifra)}</td>
+        <td>${esc(st.naslov)}<br><span class="siv">${esc(st.autori)} ${st.nakladnik ? '· ' + esc(st.nakladnik) : ''}</span>
+          ${st.mzo ? `<br><span class="siv" title="Službeni naziv iz kataloga ministarstva">📘 ${esc(st.mzo.naziv)}</span>` : ''}</td>
+        <td><select class="pIzbor" data-sek="${si}" data-i="${i}" style="max-width:420px">
+          ${opcije.map((o, n) => `<option value="${n}" ${n === odabran ? 'selected' : ''}>${esc(opisIzbora(o))}</option>`).join('')}</select>
+          <div class="pTrazi" style="display:none"><input placeholder="Traži naziv ili barkod, Enter = i u Vulpesu" style="width:100%"><div class="prijedlozi"></div></div></td>
+        <td style="white-space:nowrap"><button class="mali" data-trazi="${si}:${i}" title="Potraži drugu knjigu">🔍</button>
+          ${i ? `<button class="mali" data-spoji="${si}:${i}" title="Spoji s redom iznad (ako je naslov prelomljen)">⤒</button>` : ''}</td></tr>`;
+      }).join('')}</tbody></table></div>`).join('')}
+    <div class="traka"><button class="glavni" id="pSpremi">Spremi komplete</button><button onclick="location.hash='#kompleti'">Odustani</button></div>`;
+  const r = $('#pRezultat');
+  r.querySelectorAll('.pSekUk').forEach(c => c.onchange = () => S.popis[c.dataset.sek].ukljuci = c.checked);
+  r.querySelectorAll('.pSmjer').forEach(c => c.oninput = () => S.popis[c.dataset.sek].smjer = c.value);
+  r.querySelectorAll('.pRazred').forEach(c => c.oninput = () => S.popis[c.dataset.sek].razred = c.value);
+  r.querySelectorAll('.pUk').forEach(c => c.onchange = () => S.popis[c.dataset.sek].stavke[c.dataset.i].ukljuci = c.checked);
+  r.querySelectorAll('.pIzbor').forEach(c => c.onchange = () => {
+    const st = S.popis[c.dataset.sek].stavke[c.dataset.i];
+    const opcije = [...st.prijedlozi, ...(st.izbor.trazeno ? [st.izbor] : []), { tip: 'n', naziv: st.naslov }];
+    st.izbor = opcije[+c.value]; crtajPopis(vulpes);
+  });
+  r.querySelectorAll('[data-spoji]').forEach(b => b.onclick = async () => {
+    const [si, i] = b.dataset.spoji.split(':').map(Number), sek = S.popis[si];
+    const pret = sek.stavke[i - 1], ova = sek.stavke[i];
+    for (const k of ['naslov', 'autori', 'nakladnik']) pret[k] = (pret[k] + ' ' + ova[k]).trim();
+    pret.sifra = pret.sifra || ova.sifra;
+    pret.prijedlozi = await api('/api/popis/predlozi', pret);
+    const p = pret.prijedlozi[0];
+    pret.izbor = p && p.ocjena >= 0.6 ? p : { tip: 'n', naziv: pret.naslov };
+    sek.stavke.splice(i, 1); crtajPopis(vulpes);
+  });
+  r.querySelectorAll('[data-trazi]').forEach(b => b.onclick = () => {
+    const [si, i] = b.dataset.trazi.split(':').map(Number), st = S.popis[si].stavke[i];
+    const okvir = b.closest('tr').querySelector('.pTrazi'); okvir.style.display = '';
+    const inp = okvir.querySelector('input'); inp.value = st.naslov.split(/[:(,]| - /)[0].split(/\s+/).slice(0, 3).join(' '); inp.focus();
+    trazilica(inp, okvir.querySelector('.prijedlozi'), k => {
+      st.izbor = k.izvor === 'vulpes' ? { tip: 'v', sifra: k.sifra, barkod: k.barkod, naziv: k.naziv, cijena: k.cijena, trazeno: true }
+        : { tip: 'k', id: k.id, naziv: k.naziv, cijena: k.cijena, trazeno: true };
+      st.ukljuci = true; crtajPopis(vulpes);
+    });
+    inp.dispatchEvent(new Event('input'));
+  });
+  $('#pSpremi').onclick = async () => {
+    const sk = $('#pSkola').value;
+    if (!sk || sk === '+') return poruka('Odaberi školu na vrhu.', true);
+    const sekcije = S.popis.filter(s => s.ukljuci).map(s => ({ smjer: s.smjer, razred: s.razred,
+      stavke: s.stavke.filter(x => x.ukljuci).map(x => ({ izbor: x.izbor, sifra: x.sifra, naslov: x.naslov, autori: x.autori, nakladnik: x.nakladnik, predmet: x.predmet })) }));
+    const rez = await api('/api/popis/spremi', { skola_id: +sk, sekcije });
+    await ucitajOsnovno();
+    poruka(`Spremljeno ${rez.kompleta} kompleta (${rez.novih_knjiga} novih knjiga).`);
+    S.kf = sk; location.hash = '#kompleti';
+  };
+}
+
+/* ------------------------------------------------ Knjige (katalog) i Vulpes */
+function stranicaKnjige() {
+  $('#sadrzaj').innerHTML = `
+    <h2>Knjige</h2>
+    <div class="traka">
+      <input id="trazi" placeholder="Traži naziv, autora, nakladnika ili barkod…" style="min-width:300px">
+      <select id="kNakl"><option value="">svi nakladnici</option>${[...new Set(S.knjige.map(k => k.nakladnik).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'hr')).map(n => `<option ${n === S.knf ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+      <select id="kVrsta"><option value="">sve vrste</option>${[...new Set(S.knjige.map(k => k.vrsta).filter(Boolean))].sort().map(n => `<option ${n === S.kvf ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+      <label><input type="checkbox" id="neakt"> prikaži neaktivne</label><span class="siv" id="kInfo"></span>
+      <div class="desno"><button id="mzoUvoz" title="Excel tablica odobrenih udžbenika s mzom.gov.hr">Uvoz kataloga ministarstva</button><input type="file" id="mzoDat" accept=".xlsx,.csv" style="display:none">
+        <button onclick="usporedbaVulpes()">Usporedi cijene s Vulpesom</button><button class="glavni" onclick="urediKnjigu()">+ Nova knjiga</button></div>
+    </div>
+    <div class="okvir"><b>Dodaj iz Vulpesa:</b> <span class="siv">upiši dio naziva ili barkod i stisni Enter – naziv, barkod i cijena se preuzmu iz Vulpesa</span>
+      <input id="traziVulpes" placeholder="npr. MATEMATIKA 1 ili 978953…" style="width:100%;margin-top:4px"><div class="prijedlozi" id="prijedloziV"></div></div>
+    <table><thead><tr><th>Naziv</th><th>Vrsta</th><th>Nakladnik</th><th>Barkod</th><th class="br">Cijena</th><th>Vulpes</th></tr></thead><tbody id="redovi"></tbody></table>`;
+  const crtaj = () => {
+    const rijeci = norm($('#trazi').value).split(/\s+/).filter(Boolean), sveK = $('#neakt').checked;
+    S.knf = $('#kNakl').value; S.kvf = $('#kVrsta').value;
+    const l = S.knjige.filter(k => (sveK || k.aktivna) && (!S.knf || k.nakladnik === S.knf) && (!S.kvf || k.vrsta === S.kvf)
+      && rijeci.every(w => norm(`${k.naziv} ${k.autori} ${k.nakladnik} ${k.barkod}`).includes(w)))
+      .sort((a, b) => S.knf ? a.naziv.localeCompare(b.naziv, 'hr') : 0);
+    $('#kInfo').textContent = l.length + ' knjiga';
+    $('#redovi').innerHTML = l.slice(0, 300).map(k => `<tr class="klik ${k.aktivna ? '' : 'neaktivna'}" onclick="urediKnjigu(${k.id})">
+      <td>${esc(k.naziv)}<br><span class="siv">${esc(k.autori)}</span></td><td>${esc(k.vrsta)}</td><td>${esc(k.nakladnik)}</td><td>${esc(k.barkod)}</td>
+      <td class="br">${kn(k.cijena)}</td><td>${k.vulpes_sifra ? '✓ ' + k.vulpes_sifra : ''}</td></tr>`).join('') +
+      (l.length > 300 ? `<tr><td colspan="6" class="siv">… još ${l.length - 300}, suzi pretragu</td></tr>` : '');
+  };
+  $('#trazi').oninput = crtaj; $('#neakt').onchange = crtaj; $('#kNakl').onchange = crtaj; $('#kVrsta').onchange = crtaj;
+  $('#mzoUvoz').onclick = () => $('#mzoDat').click();
+  $('#mzoDat').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    poruka('Učitavam katalog, to može potrajati pola minute…');
+    const r = await api('/api/uvoz/mzo', { ime: f.name, sadrzaj: await datotekaBase64(f) });
+    poruka(`Katalog učitan: ${r.udzbenika} udžbenika, ${r.povezano} naših knjiga povezano sa šifrom ministarstva.`);
+    await ucitajOsnovno();
+  };
+  trazilica($('#traziVulpes'), $('#prijedloziV'), async r => { const x = await uKatalog(r); urediKnjigu(x.id); }, { katalog: false });
+  crtaj();
+}
+function urediKnjigu(id) {
+  const k = id ? { ...knjigaPoId(id) } : { naziv: '', vrsta: 'udžbenik', autori: '', nakladnik: '', cijena: 0, barkod: '', vulpes_sifra: null, aktivna: 1 };
+  $('#sadrzaj').innerHTML = `
+    <h2>${id ? 'Uredi knjigu' : 'Nova knjiga'}</h2>
+    <div class="polja">
+      <label class="sirok">Naziv<input id="naziv" value="${esc(k.naziv)}"></label>
+      <label>Vrsta<input id="vrsta" value="${esc(k.vrsta)}" list="vrste"><datalist id="vrste"><option>udžbenik</option><option>radna bilj</option><option>zbirka</option><option>atlas</option></datalist></label>
+      <label>Autori<input id="autori" value="${esc(k.autori)}"></label>
+      <label>Nakladnik<input id="nakladnik" value="${esc(k.nakladnik)}" list="nakl"><datalist id="nakl">${[...new Set(S.knjige.map(x => x.nakladnik).filter(Boolean))].sort().map(n => `<option>${esc(n)}</option>`).join('')}</datalist></label>
+      <label>Barkod<input id="barkod" value="${esc(k.barkod)}"></label>
+      <label>Cijena (€)<input id="cijena" value="${k.cijena}"></label>
+      <label>Vulpes šifra<input id="vulpes_sifra" value="${k.vulpes_sifra ?? ''}" readonly></label>
+      <label>Aktivna<select id="aktivna"><option value="1">da</option><option value="0" ${k.aktivna ? '' : 'selected'}>ne (skrivena)</option></select></label>
+    </div>
+    <div class="okvir"><b>Poveži s Vulpesom:</b> <span class="siv">potraži artikl u Vulpesu; preuzima se barkod, šifra i cijena</span>
+      <input id="traziV" placeholder="Naziv ili barkod pa Enter…" style="width:100%;margin-top:4px"><div class="prijedlozi" id="prijV"></div></div>
+    <div class="traka"><button class="glavni" id="spremi">Spremi</button><button onclick="stranicaKnjige()">Odustani</button></div>`;
+  trazilica($('#traziV'), $('#prijV'), r => {
+    $('#barkod').value = r.barkod; $('#cijena').value = r.cijena; $('#vulpes_sifra').value = r.sifra;
+    if (!$('#naziv').value) $('#naziv').value = r.naziv;
+    poruka('Preuzeto iz Vulpesa – stisni Spremi.');
+  }, { katalog: false });
+  $('#spremi').onclick = async () => {
+    const d = { id: k.id };
+    for (const p of ['naziv', 'vrsta', 'autori', 'nakladnik', 'barkod']) d[p] = $('#' + p).value.trim();
+    d.cijena = broj($('#cijena').value); d.vulpes_sifra = +$('#vulpes_sifra').value || null; d.aktivna = +$('#aktivna').value;
+    await api('/api/knjiga', d);
+    S.knjige = await api('/api/knjige'); poruka('Knjiga spremljena.'); stranicaKnjige();
+  };
+}
+async function usporedbaVulpes() {
+  $('#sadrzaj').innerHTML = '<h2>Usporedba s Vulpesom</h2><p>Čitam Vulpes…</p>';
+  let u;
+  try { u = await api('/api/vulpes/usporedba'); } catch (e) { $('#sadrzaj').innerHTML += `<p>${esc(e.message)}</p><p><a href="#postavke">Otvori postavke</a></p>`; return; }
+  $('#sadrzaj').innerHTML = `
+    <h2>Usporedba s Vulpesom</h2>
+    <p>Knjige se s Vulpesom povezuju po <b>barkodu</b>. Pronađeno ih je ${u.povezano}; od toga ${u.razlike.length} ima drugačiju cijenu u Vulpesu. ${u.nema.length} aktivnih knjiga nije pronađeno u Vulpesu.</p>
+    <div class="traka"><button class="glavni" id="preuzmi">Preuzmi cijene za označene</button><button onclick="stranicaKnjige()">Natrag</button></div>
+    <table><thead><tr><th><input type="checkbox" id="sve" checked></th><th>Naziv (kod nas)</th><th>Naziv u Vulpesu</th><th class="br">Naša cijena</th><th class="br">Vulpes cijena</th></tr></thead><tbody>
+    ${u.razlike.map(r => `<tr><td><input type="checkbox" class="oznaka" value="${r.knjiga.id}" checked></td><td>${esc(r.knjiga.naziv)}</td><td>${esc(r.vulpes.naziv)}</td>
+      <td class="br">${kn(r.knjiga.cijena)}</td><td class="br"><b>${kn(r.vulpes.cijena)}</b></td></tr>`).join('')}</tbody></table>
+    <h3 style="margin-top:24px">Nije pronađeno u Vulpesu (${u.nema.length})</h3>
+    <p class="siv">Klikni knjigu pa je u dijelu "Poveži s Vulpesom" pronađi po nazivu. Ako se više ne koristi, postavi je kao neaktivnu.</p>
+    <table><tbody>${u.nema.map(k => `<tr class="klik" onclick="urediKnjigu(${k.id})"><td>${esc(k.naziv)}</td><td>${esc(k.nakladnik)}</td><td>${esc(k.barkod) || '<span class="siv">nema barkoda</span>'}</td><td class="br">${kn(k.cijena)}</td></tr>`).join('')}</tbody></table>`;
+  $('#sve').onchange = e => document.querySelectorAll('.oznaka').forEach(c => c.checked = e.target.checked);
+  $('#preuzmi').onclick = async () => {
+    const { azurirano } = await api('/api/vulpes/preuzmi', { ids: oznacene() });
+    S.knjige = await api('/api/knjige'); poruka('Ažurirano ' + azurirano + ' knjiga.'); usporedbaVulpes();
+  };
+}
+
+/* ------------------------------------------------ Obavijest kupcu (WhatsApp / SMS) */
+function brojMobitela(t) {
+  let d = String(t || '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  else if (d.startsWith('0')) d = '385' + d.slice(1);
+  return d.length >= 9 ? d : '';
+}
+const cekaDana = n => n.status === 'stiglo' && n.stiglo_datum ? Math.floor((Date.now() - new Date(n.stiglo_datum)) / 864e5) : -1;
+function porukaKupcu(n, ostatak) {
+  const podsjetnik = cekaDana(n) >= +S.postavke.podsjetnik_dana && S.postavke.poruka_podsjetnik;
+  return ((podsjetnik ? S.postavke.poruka_podsjetnik : S.postavke.poruka_kupcu) || '').replace(/\{broj\}/g, n.broj).replace(/\{kupac\}/g, n.kupac)
+    .replace(/\{firma\}/g, S.postavke.firma).replace(/\{ostatak\}/g, kn(Math.max(0, ostatak)));
+}
+function gumbiObavijesti(n, ostatak) {
+  const tel = brojMobitela(n.telefon);
+  if (!tel) return '';
+  const p = encodeURIComponent(porukaKupcu(n, ostatak));
+  return `<a class="mali" title="WhatsApp" target="_blank" href="https://wa.me/${tel}?text=${p}">💬 WhatsApp</a>
+    <a class="mali" title="SMS" href="sms:+${tel}?body=${p}">✉ SMS</a>`;
+}
+
+/* ------------------------------------------------ Obavijesti više kupaca redom */
+function obavijestiSve(ns) {
+  ns = (ns || []).filter(n => brojMobitela(n.telefon));
+  if (!ns.length) return poruka('Označi narudžbe kvačicom (kupci s brojem mobitela).', true);
+  const poslano = new Set(), o = document.createElement('div');
+  o.className = 'modal';
+  const sljedeci = () => ns.find(n => !poslano.has(n.id));
+  const link = (n, nacin) => {
+    const tel = brojMobitela(n.telefon), t = encodeURIComponent(porukaKupcu(n, n.iznos - n.akontacija));
+    return nacin === 'wa' ? `https://wa.me/${tel}?text=${t}` : `sms:+${tel}?body=${t}`;
+  };
+  const crtaj = () => {
+    const s = sljedeci();
+    o.innerHTML = `<div class="modal-okvir" style="height:auto;max-height:85vh"><div class="traka"><b>Obavijesti kupce</b>
+        <span class="siv">${poslano.size} / ${ns.length} poslano</span>
+        <div class="desno">${s ? `<button class="glavni" id="oSljedeci">💬 WhatsApp: ${esc(s.kupac)} ▶</button>` : '<b style="color:#166534">✓ Svi su obaviješteni</b>'}
+          <button id="oZatvori">Zatvori</button></div></div>
+      <p class="siv" style="margin:4px 0">Klikni "WhatsApp" – otvori se poruka, pošalješ je, vratiš se ovdje i klikneš za sljedećeg.</p>
+      <div style="overflow:auto"><table><tbody>${ns.map(n => `<tr style="${poslano.has(n.id) ? 'background:#dcfce7' : ''}">
+        <td>${n.broj}</td><td>${esc(n.kupac)}</td><td>${esc(n.telefon)}</td><td class="br">${kn(n.iznos - n.akontacija)}</td>
+        <td><a class="mali" target="_blank" data-id="${n.id}" href="${link(n, 'wa')}">💬 WhatsApp</a> <a class="mali" data-id="${n.id}" href="${link(n, 'sms')}">✉ SMS</a>
+          ${poslano.has(n.id) ? ' ✓' : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
+    o.querySelectorAll('a[data-id]').forEach(a => a.addEventListener('click', () => { poslano.add(+a.dataset.id); setTimeout(crtaj, 300); }));
+    if ($('#oSljedeci', o)) $('#oSljedeci', o).onclick = () => { const n = sljedeci(); window.open(link(n, 'wa'), '_blank'); poslano.add(n.id); crtaj(); };
+    $('#oZatvori', o).onclick = () => o.remove();
+  };
+  document.body.appendChild(o); crtaj();
+}
+
+/* ------------------------------------------------ Zbirni popis za platitelja (Grad, Županija, CZSS) */
+async function ispisPlatitelja(f, q) {
+  const ns = await api('/api/platitelj?' + q), p = S.postavke;
+  const uk = ns.reduce((a, n) => a + n.iznos, 0), sk = S.skole.find(s => s.id == f.skola);
+  $('#ispis').innerHTML = `<div style="display:flex;justify-content:space-between"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)} · tel. ${esc(p.telefon)}</div>
+      <div style="text-align:right">Datum: ${datum(new Date().toISOString().slice(0, 10))}</div></div>
+    <h3>Popis učenika i udžbenika – plaća: ${esc(f.platitelj)}</h3>
+    <p>Školska godina ${f.godina ? `${f.godina}./${+f.godina + 1}.` : ''}${sk ? ' · ' + esc(sk.naziv) : ''}${S.razina ? ' · ' + (S.razina === 'OŠ' ? 'osnovne škole' : 'srednje škole') : ''} · ${ns.length} učenika</p>
+    <table><thead><tr><th>#</th><th>Br. nar.</th><th>Učenik / kupac</th><th>Škola</th><th>Raz.</th><th>Knjige</th><th class="br">Iznos</th></tr></thead><tbody>
+    ${ns.map((n, i) => `<tr><td>${i + 1}</td><td>${n.broj}</td><td>${esc(n.kupac)}</td><td>${esc(n.skola || '')}</td><td>${esc(n.razred)}</td>
+      <td style="font-size:11px">${n.stavke.map(s => esc(s.naziv) + (s.kolicina > 1 ? ' ×' + s.kolicina : '')).join('; ')}</td><td class="br">${kn(n.iznos)}</td></tr>`).join('')}
+    </tbody></table><p style="text-align:right;font-size:15px">Ukupno: <b>${kn(uk)}</b></p>
+    <p style="margin-top:30px">Potpis i pečat: ______________________</p>`;
+  if (confirm('Ispisati popis? (Odustani = preuzmi Excel/CSV)')) window.print();
+  else location.href = sRazinom('/csv/platitelj?' + q);
+}
+
+/* ------------------------------------------------ Stiglo (primka po knjigama) */
+function stranicaStiglo() {
+  S.primka = S.primka || [];
+  $('#sadrzaj').innerHTML = `
+    <h2>Stiglo od nakladnika</h2>
+    <p class="siv">Očitaj barkodove knjiga iz pošiljke (ili potraži po nazivu). Program ih rasporedi na narudžbe kupaca, najstarije prve,
+      i pokaže koje su narudžbe sad kompletne.</p>
+    <div class="okvir"><input id="pTrazi" placeholder="Očitaj barkod ili upiši naziv pa Enter…" style="width:100%"><div class="prijedlozi" id="pPrijedlozi"></div></div>
+    <table><thead><tr><th>Naziv</th><th>Barkod</th><th class="br">Komada</th><th></th></tr></thead><tbody id="pStavke"></tbody></table>
+    <div class="traka" style="margin-top:12px"><button class="glavni" id="pRasporedi">Rasporedi na narudžbe</button><button id="pOcisti">Očisti popis</button></div>
+    <div id="pRez"></div>`;
+  const crtaj = () => {
+    $('#pStavke').innerHTML = S.primka.map((s, i) => `<tr><td>${esc(s.naziv)}</td><td>${esc(s.barkod)}</td>
+      <td class="br"><input type="number" min="1" value="${s.kolicina}" style="width:70px" onchange="S.primka[${i}].kolicina=+this.value||1"></td>
+      <td><button class="mali opasno" onclick="S.primka.splice(${i},1);stranicaStiglo()">✕</button></td></tr>`).join('')
+      || '<tr><td colspan="4" class="siv">Još ništa nije očitano.</td></tr>';
+  };
+  trazilica($('#pTrazi'), $('#pPrijedlozi'), r => {
+    const kljuc = r.barkod || r.naziv, post = S.primka.find(s => (s.barkod || s.naziv) === kljuc);
+    if (post) post.kolicina++;
+    else S.primka.push({ naziv: r.naziv, barkod: r.barkod || '', knjiga_id: r.izvor === 'vulpes' ? null : r.id, kolicina: 1 });
+    crtaj();
+  });
+  $('#pTrazi').focus();
+  $('#pOcisti').onclick = () => { S.primka = []; stranicaStiglo(); };
+  $('#pRasporedi').onclick = async () => {
+    if (!S.primka.length) return poruka('Očitaj barem jednu knjigu.', true);
+    const r = await api('/api/primka', { stavke: S.primka });
+    S.primka = []; crtaj();
+    const visak = r.stavke.filter(s => s.visak);
+    $('#pRez').innerHTML = `
+      <div class="okvir"><b>Raspoređeno:</b> ${r.stavke.reduce((a, s) => a + s.raspodijeljeno, 0)} kom.
+        ${visak.length ? `<br><span class="siv">Nije bilo narudžbe za: ${visak.map(s => `${esc(s.naziv)} (${s.visak})`).join(', ')} – to ide na policu.</span>` : ''}</div>
+      <h3>Kompletne narudžbe (${r.kompletne.length})</h3>
+      ${r.kompletne.length ? `<table><thead><tr><th><input type="checkbox" id="sve" checked></th><th>Br.</th><th>Kupac</th><th>Telefon</th><th class="br">Za platiti</th><th>Obavijesti</th></tr></thead><tbody>
+        ${r.kompletne.map(n => `<tr><td><input type="checkbox" class="oznaka" value="${n.id}" checked></td><td>${n.broj}</td><td>${esc(n.kupac)}</td><td>${esc(n.telefon)}</td>
+          <td class="br">${kn(n.iznos - n.akontacija)}</td><td>${gumbiObavijesti(n, n.iznos - n.akontacija)}</td></tr>`).join('')}</tbody></table>
+        <div class="traka" style="margin-top:8px"><button class="glavni" id="pStatus">Označi označene kao "stiglo"</button>
+          <button class="glavni" id="pObavijesti">📲 Obavijesti sve označene</button></div>` : '<p class="siv">Nijedna narudžba još nije kompletna.</p>'}`;
+    if ($('#pObavijesti')) $('#pObavijesti').onclick = () => obavijestiSve(r.kompletne.filter(n => oznacene().includes(n.id)));
+    if ($('#sve')) $('#sve').onchange = e => document.querySelectorAll('.oznaka').forEach(c => c.checked = e.target.checked);
+    if ($('#pStatus')) $('#pStatus').onclick = async () => {
+      await api('/api/narudzbe/status', { ids: oznacene(), status: 'stiglo' }); poruka('Status promijenjen.');
+    };
+  };
+  crtaj();
+}
+
+/* ------------------------------------------------ Nakladnici i narudžbenice */
+async function stranicaNakladnici() {
+  const [saz, nar] = await Promise.all([api('/api/narudzbenica/prijedlog'), api('/api/narudzbenice')]);
+  $('#sadrzaj').innerHTML = `
+    <h2>Nakladnici ${S.razina ? `– samo ${S.razina === 'OŠ' ? 'osnovne' : 'srednje'} škole` : ''}</h2>
+    <div class="traka"><span class="siv">Količine za naručiti = naručeno od kupaca (status "naručeno", sezona ${S.sezona}) − već naručeno od nakladnika.
+      ${S.razina ? '' : '<br>Gore desno odaberi "Osnovne" ili "Srednje" da ih naručuješ odvojeno.'}</span>
+      <div class="desno"><button class="glavni" id="sveNar">⚡ Napravi sve narudžbenice odjednom</button><button onclick="location.hash='#zbirno'">Zbirni popis svih knjiga</button></div></div>
+    <table><thead><tr><th>Nakladnik</th><th class="br">Naslova za naručiti</th><th class="br">Komada</th><th></th></tr></thead><tbody>
+      ${saz.map(s => `<tr><td>${esc(s.nakladnik)}</td><td class="br">${s.naslova}</td><td class="br"><b>${s.komada}</b></td>
+        <td><button class="mali ${s.komada ? 'glavni' : ''}" data-nak="${esc(s.nakladnik)}">Napravi narudžbenicu</button></td></tr>`).join('')
+        || '<tr><td colspan="4" class="siv">Nema otvorenih narudžbi kupaca.</td></tr>'}</tbody></table>
+    <div class="okvir" style="margin-top:16px"><b>Povrat nakladniku (remisija)</b> <span class="siv">– višak = naručeno od nakladnika − ono što trebaju kupci (otkazane narudžbe se ne broje)</span>
+      <div class="traka" style="margin-top:6px"><select id="povNak"><option value="">— nakladnik —</option>${[...new Set(nar.filter(n => n.godina == S.sezona).map(n => n.nakladnik))].sort().map(x => `<option>${esc(x)}</option>`).join('')}</select>
+        <button id="povNapravi">Napravi povratnicu</button></div></div>
+    <h3 style="margin-top:24px">Narudžbenice i povratnice</h3>
+    <div class="traka"><button id="ispisiDanas">🖨 Ispiši današnje narudžbenice</button></div>
+    <table><thead><tr><th>Broj</th><th>Datum</th><th>Nakladnik</th><th class="br">Naslova</th><th class="br">Komada</th></tr></thead><tbody>
+      ${nar.filter(n => !S.razina || !n.razina || n.razina === S.razina).map(n => `<tr class="klik" onclick="location.hash='#narudzbenica/${n.id}'"><td>${n.tip === 'povrat' ? '<span class="znacka crvena">povrat</span> ' : ''}${n.razina ? `<span class="znacka">${n.razina}</span> ` : ''}${n.broj}/${n.godina}</td><td>${datum(n.datum)}</td><td>${esc(n.nakladnik)}</td>
+        <td class="br">${n.naslova}</td><td class="br">${n.komada}</td></tr>`).join('') || '<tr><td colspan="5" class="siv">Još nema narudžbenica.</td></tr>'}</tbody></table>`;
+  document.querySelectorAll('[data-nak]').forEach(b => b.onclick = () => location.hash = '#narudzbenica/nova:' + encodeURIComponent(b.dataset.nak));
+  $('#sveNar').onclick = async () => {
+    const za = saz.filter(s => s.komada && s.nakladnik !== 'bez nakladnika');
+    if (!za.length) return poruka('Nema ništa za naručiti.', true);
+    if (!confirm(`Napraviti ${za.length} narudžbenica (${za.map(s => s.nakladnik).join(', ')}) s predloženim količinama${S.razina ? ' za ' + (S.razina === 'OŠ' ? 'osnovne' : 'srednje') + ' škole' : ''}?`)) return;
+    const r = await api('/api/narudzbenice/sve', { razina: S.razina });
+    poruka(`Napravljeno ${r.ids.length} narudžbenica.`); ispisNarudzbenica(r.ids);
+  };
+  $('#ispisiDanas').onclick = () => {
+    const danas = new Date().toISOString().slice(0, 10);
+    const ids = nar.filter(n => n.datum === danas && n.tip !== 'povrat' && (!S.razina || n.razina === S.razina || !n.razina)).map(n => n.id);
+    ids.length ? ispisNarudzbenica(ids) : poruka('Danas nema narudžbenica.', true);
+  };
+  $('#povNapravi').onclick = () => $('#povNak').value ? location.hash = '#narudzbenica/povrat:' + encodeURIComponent($('#povNak').value) : poruka('Odaberi nakladnika.', true);
+}
+function dokumentNarudzbenice(n) {
+  const p = S.postavke, kom = n.stavke.reduce((a, s) => a + s.kolicina, 0), naslov = n.tip === 'povrat' ? 'POVRATNICA' : 'NARUDŽBENICA';
+  return `
+    <div style="display:flex;justify-content:space-between"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)}<br>tel. ${esc(p.telefon)}</div>
+      <div style="text-align:right"><b style="font-size:17px">${naslov} br. ${n.broj}/${n.godina}</b><br>Datum: ${datum(n.datum)}</div></div>
+    <p>Nakladnik: <b>${esc(n.nakladnik)}</b>${n.razina ? ` &nbsp; (${n.razina === 'OŠ' ? 'osnovne škole' : 'srednje škole'})` : ''}</p>
+    <table><thead><tr><th>#</th><th>Naziv</th><th>Barkod</th><th class="br">Količina</th></tr></thead><tbody>
+      ${n.stavke.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.naziv)}</td><td>${esc(s.barkod)}</td><td class="br"><b>${s.kolicina}</b></td></tr>`).join('')}
+    </tbody></table><p style="text-align:right">Ukupno komada: <b>${kom}</b></p>${n.napomena ? `<p>Napomena: ${esc(n.napomena)}</p>` : ''}`;
+}
+async function ispisNarudzbenica(ids) {
+  const ns = await Promise.all(ids.map(id => api('/api/narudzbenica?id=' + id)));
+  $('#ispis').innerHTML = ns.map(n => `<div class="listic">${dokumentNarudzbenice(n)}</div>`).join('');
+  window.print();
+  stranicaNakladnici();
+}
+async function stranicaNarudzbenica(param) {
+  if (param.startsWith('nova:')) return novaNarudzbenica(decodeURIComponent(param.slice(5)));
+  if (param.startsWith('povrat:')) return novaNarudzbenica(decodeURIComponent(param.slice(7)), true);
+  const n = await api('/api/narudzbenica?id=' + param);
+  const p = S.postavke, kom = n.stavke.reduce((a, s) => a + s.kolicina, 0), povrat = n.tip === 'povrat';
+  const dokument = dokumentNarudzbenice(n);
+  $('#sadrzaj').innerHTML = `<div class="okvir">${dokument}</div>
+    <div class="traka"><label>E-mail nakladnika <input id="nEmail" value="${esc(n.email)}" style="min-width:260px"></label>
+      <button class="glavni" id="nMail">Pošalji e-mailom</button><button onclick="window.print()">Ispiši</button>
+      ${povrat ? '' : `<button class="glavni" id="nExcel" title="Upiše količine u Excel narudžbenicu koju je poslao nakladnik">📗 Popuni Excel nakladnika</button>
+        <input type="file" id="nExcelDat" accept=".xlsx" style="display:none">`}
+      <button onclick="location.href='/csv/narudzbenica?id=${n.id}'">Excel (CSV)</button><button onclick="location.hash='#nakladnici'">Natrag</button>
+      <div class="desno"><button class="opasno" id="nObrisi">Obriši</button></div></div>
+    ${povrat ? '' : `<p class="siv">Excel obrazac nakladnika: ${n.obrazac ? `<b>${esc(n.obrazac.ime)}</b> (učitan ${datum(n.obrazac.datum)})` : 'još nije učitan – kod prvog klika odaberite datoteku koju je poslao nakladnik'}
+      · <a href="#" id="nExcelNovi">učitaj novi obrazac</a></p>`}<div id="nExcelInfo"></div>`;
+  $('#ispis').innerHTML = dokument;
+  $('#nMail').onclick = async () => {
+    const email = $('#nEmail').value.trim();
+    if (email !== n.email) await api('/api/nakladnik', { naziv: n.nakladnik, email });
+    const tijelo = (povrat ? `Poštovani,\n\nprema povratnici br. ${n.broj}/${n.godina} vraćamo Vam sljedeće neprodane udžbenike:\n\n`
+      : `Poštovani,\n\nmolimo da nam prema narudžbenici br. ${n.broj}/${n.godina} isporučite:\n\n`) +
+      n.stavke.map(s => `${s.kolicina} kom - ${s.naziv}${s.barkod ? ' (' + s.barkod + ')' : ''}`).join('\n') +
+      `\n\nUkupno: ${kom} kom.${n.napomena ? '\n' + n.napomena : ''}\n\nLijep pozdrav,\n${p.firma}\n${p.adresa}\ntel. ${p.telefon}`;
+    location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(`${povrat ? 'Povratnica' : 'Narudžbenica'} ${n.broj}/${n.godina} - ${p.firma}`)}&body=${encodeURIComponent(tijelo)}`;
+  };
+  if ($('#nExcel')) {
+    const preuzmi = async (dat) => {
+      const d = { id: n.id };
+      if (dat) Object.assign(d, { ime: dat.name, sadrzaj: await datotekaBase64(dat) });
+      let r;
+      try { r = await api('/api/narudzbenica/excel', d); }
+      catch (e) { $('#nExcelInfo').innerHTML = `<div class="okvir" style="color:#991b1b"><b>Obrazac nije popunjen:</b> ${esc(e.message)}</div>`; return; }
+      if (dat) n.obrazac = { ime: dat.name };
+      const bajt = Uint8Array.from(atob(r.sadrzaj), ch => ch.charCodeAt(0));
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([bajt], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download = r.ime; a.click();
+      $('#nExcelInfo').innerHTML = `<div class="okvir"><b>✓ Preuzeto: ${esc(r.ime)}</b> – upisano ${r.upisano} naslova (${r.listovi.map(l => `${esc(l.list)}: ${l.upisano}`).join(', ')}).
+        ${r.listovi.some(l => l.obrisano) ? `Obrisano ${r.listovi.reduce((a, l) => a + (l.obrisano || 0), 0)} starih količina koje su bile upisane u obrascu.` : ''}
+        Datoteka je u mapi Preuzimanja; priložite je u e-mail nakladniku.
+        ${r.nema.length ? `<div style="color:#991b1b;margin-top:4px">Nisu u obrascu (dopišite ručno ili provjerite barkod): ${r.nema.map(s => `${esc(s.naziv)} ${s.barkod ? '(' + esc(s.barkod) + ')' : '(nema barkod)'} – ${s.kolicina} kom`).join('; ')}</div>` : ''}</div>`;
+    };
+    $('#nExcel').onclick = () => n.obrazac ? preuzmi() : $('#nExcelDat').click();
+    $('#nExcelDat').onchange = e => { const f = e.target.files[0]; e.target.value = ''; f && preuzmi(f); };
+    $('#nExcelNovi').onclick = e => { e.preventDefault(); $('#nExcelDat').click(); };
+  }
+  $('#nObrisi').onclick = async () => {
+    if (!confirm('Obrisati narudžbenicu? Te količine će se ponovno predlagati za naručivanje.')) return;
+    await api('/api/narudzbenica/obrisi', { id: n.id }); location.hash = '#nakladnici';
+  };
+}
+async function novaNarudzbenica(nakladnik, povrat) {
+  const st = (await api((povrat ? '/api/povrat/prijedlog' : '/api/narudzbenica/prijedlog') + '?nakladnik=' + encodeURIComponent(nakladnik))).map(r => ({ ...r }));
+  $('#sadrzaj').innerHTML = povrat ? `
+    <h2>Povrat nakladniku – ${esc(nakladnik)}</h2>
+    <p class="siv">Predloženi povrat = naručeno od nakladnika (umanjeno za prijašnje povrate) − ono što trebaju kupci. Provjeri sa stanjem u Vulpesu i promijeni po potrebi.</p>
+    <table><thead><tr><th>Naziv</th><th>Barkod</th><th class="br">Naručeno od nakl.</th><th class="br">Trebaju kupci</th><th class="br">Stanje Vulpes</th><th class="br">Vratiti</th></tr></thead><tbody id="nStavke"></tbody></table>`
+    : `
+    <h2>Nova narudžbenica – ${esc(nakladnik)}${S.razina ? ` <span class="znacka">${S.razina === 'OŠ' ? 'osnovne škole' : 'srednje škole'}</span>` : ''}</h2>
+    <p class="siv">Količine su predložene iz narudžbi kupaca. Možeš ih promijeniti (npr. naručiti više za policu) ili staviti 0.</p>
+    <table><thead><tr><th>Naziv</th><th>Barkod</th><th class="br">Traže kupci</th><th class="br">Već naručeno</th><th class="br">Stanje Vulpes</th><th class="br">Naručiti</th></tr></thead><tbody id="nStavke"></tbody></table>`;
+  $('#sadrzaj').innerHTML += `
+    <div class="okvir" style="margin-top:12px"><b>Dodaj knjigu:</b><input id="nTrazi" placeholder="Naziv ili barkod…" style="width:100%;margin-top:4px"><div class="prijedlozi" id="nPrijedlozi"></div></div>
+    <div class="polja"><label class="sirok">Napomena<input id="nNapomena"></label></div>
+    <div class="traka"><button class="glavni" id="nSpremi">Spremi ${povrat ? 'povratnicu' : 'narudžbenicu'}</button><button onclick="location.hash='#nakladnici'">Odustani</button></div>`;
+  const crtaj = () => $('#nStavke').innerHTML = st.map((s, i) => `<tr><td>${esc(s.naziv)}</td><td>${esc(s.barkod)}</td>
+    <td class="br">${(povrat ? s.naruceno : s.trazeno) ?? ''}</td><td class="br">${(povrat ? s.kupci : s.vec_naruceno) ?? ''}</td><td class="br">${s.stanje_vulpes ?? ''}</td>
+    <td class="br"><input type="number" min="0" value="${s.kolicina}" style="width:70px" onchange="S.nStavke[${i}].kolicina=+this.value||0"></td></tr>`).join('')
+    || `<tr><td colspan="6" class="siv">${povrat ? 'Od ovog nakladnika ove sezone ništa nije naručeno kroz program.' : 'Nema ništa za naručiti – dodaj knjigu ispod.'}</td></tr>`;
+  S.nStavke = st; crtaj();
+  trazilica($('#nTrazi'), $('#nPrijedlozi'), r => { st.push({ naziv: r.naziv, barkod: r.barkod || '', cijena: r.cijena, kolicina: 1 }); crtaj(); });
+  $('#nSpremi').onclick = async () => {
+    const { id } = await api('/api/narudzbenica', { nakladnik, napomena: $('#nNapomena').value, stavke: st, tip: povrat ? 'povrat' : 'narudzba', razina: S.razina });
+    poruka(povrat ? 'Povratnica spremljena.' : 'Narudžbenica spremljena.'); location.hash = '#narudzbenica/' + id;
+  };
+}
+
+/* ------------------------------------------------ Rabljene knjige */
+async function stranicaRabljene() {
+  S.rf = S.rf ?? 'na stanju';
+  const lista = await api('/api/rabljene?status=' + encodeURIComponent(S.rf));
+  const p = S.postavke, nova = { naziv: '', barkod: '', knjiga_id: null, ocuvanost: 'dobra', otkup_cijena: 0, prodajna_cijena: 0, prodavatelj: '', telefon: '' };
+  $('#sadrzaj').innerHTML = `
+    <h2>Rabljene knjige</h2>
+    <div class="okvir"><b>Otkup rabljene knjige</b>
+      <input id="rTrazi" placeholder="Očitaj barkod ili upiši naziv pa Enter…" style="width:100%;margin:4px 0"><div class="prijedlozi" id="rPrijedlozi"></div>
+      <div class="polja">
+        <label class="sirok">Naziv<input id="rNaziv"></label>
+        <label>Očuvanost<select id="rOcuv"><option>kao nova</option><option selected>dobra</option><option>oštećena</option></select></label>
+        <label>Otkupna cijena (€)<input id="rOtkup"></label>
+        <label>Prodajna cijena (€)<input id="rProdaja"></label>
+        <label>Prodavatelj<input id="rProdavatelj"></label>
+        <label>Telefon<input id="rTel"></label>
+      </div>
+      <button class="glavni" id="rSpremi">Spremi otkup</button> <span class="siv">Cijene se predlože kao ${esc(p.rabljene_otkup_posto)}% i ${esc(p.rabljene_prodaja_posto)}% nove cijene (Postavke).</span></div>
+    <div class="traka"><select id="rFilter">${['na stanju', 'prodano', ''].map(v => `<option value="${v}" ${v === S.rf ? 'selected' : ''}>${v || 'sve'}</option>`).join('')}</select>
+      <input id="rPretraga" placeholder="Traži…"><span class="siv" id="rInfo"></span></div>
+    <table><thead><tr><th>Naziv</th><th>Očuvanost</th><th class="br">Otkup</th><th class="br">Prodaja</th><th>Otkupljeno</th><th>Prodavatelj</th><th>Status</th><th></th></tr></thead><tbody id="rRedovi"></tbody></table>`;
+  trazilica($('#rTrazi'), $('#rPrijedlozi'), r => {
+    Object.assign(nova, { naziv: r.naziv, barkod: r.barkod || '', knjiga_id: r.izvor === 'vulpes' ? null : r.id });
+    $('#rNaziv').value = r.naziv;
+    $('#rOtkup').value = (r.cijena * broj(p.rabljene_otkup_posto) / 100).toFixed(2);
+    $('#rProdaja').value = (r.cijena * broj(p.rabljene_prodaja_posto) / 100).toFixed(2);
+  });
+  $('#rSpremi').onclick = async () => {
+    await api('/api/rabljena', { ...nova, naziv: $('#rNaziv').value, ocuvanost: $('#rOcuv').value, otkup_cijena: broj($('#rOtkup').value),
+      prodajna_cijena: broj($('#rProdaja').value), prodavatelj: $('#rProdavatelj').value, telefon: $('#rTel').value });
+    poruka('Otkup spremljen.'); stranicaRabljene();
+  };
+  const crtaj = () => {
+    const rijeci = norm($('#rPretraga').value).split(/\s+/).filter(Boolean);
+    const l = lista.filter(r => rijeci.every(w => norm(r.naziv + ' ' + r.barkod + ' ' + r.prodavatelj).includes(w)));
+    $('#rInfo').textContent = `${l.length} knjiga`;
+    $('#rRedovi').innerHTML = l.map(r => `<tr><td>${esc(r.naziv)}<br><span class="siv">${esc(r.barkod)}</span></td><td>${esc(r.ocuvanost)}</td>
+      <td class="br">${kn(r.otkup_cijena)}</td><td class="br">${kn(r.prodajna_cijena)}</td><td>${datum(r.datum_otkupa)}</td><td>${esc(r.prodavatelj)}</td>
+      <td><span class="status ${r.status === 'prodano' ? 'preuzeto' : ''}">${r.status}</span>${r.datum_prodaje ? ' ' + datum(r.datum_prodaje) : ''}</td>
+      <td style="white-space:nowrap">${r.status !== 'prodano' ? `<button class="mali glavni" data-prodaj="${r.id}">Prodano</button>` : ''}
+        <button class="mali opasno" data-obrisi="${r.id}">✕</button></td></tr>`).join('') || '<tr><td colspan="8" class="siv">Nema knjiga.</td></tr>';
+  };
+  $('#rPretraga').oninput = crtaj;
+  $('#rFilter').onchange = e => { S.rf = e.target.value; stranicaRabljene(); };
+  $('#rRedovi').onclick = async e => {
+    const id = +(e.target.dataset.prodaj || e.target.dataset.obrisi);
+    if (!id) return;
+    const r = lista.find(x => x.id === id);
+    if (e.target.dataset.prodaj) await api('/api/rabljena', { ...r, status: 'prodano' });
+    else if (confirm('Obrisati?')) await api('/api/rabljena/obrisi', { id }); else return;
+    stranicaRabljene();
+  };
+  crtaj();
+}
+
+/* ------------------------------------------------ Online predbilježbe roditelja */
+function osvjeziBrojPred() {
+  const b = $('#brPred'); if (!b) return;
+  b.textContent = S.predbiljezbe_nove; b.style.display = S.predbiljezbe_nove ? '' : 'none';
+}
+async function stranicaPredbiljezbe() {
+  S.pf = S.pf ?? 'nova';
+  const l = await api('/api/predbiljezbe?status=' + encodeURIComponent(S.pf)), p = S.postavke;
+  S.predbiljezbe_nove = (await api('/api/init')).predbiljezbe_nove; osvjeziBrojPred();
+  $('#sadrzaj').innerHTML = `
+    <h2>Online predbilježbe</h2>
+    <div class="okvir">${p.predbiljezba_ukljucena === '1' ? '<b style="color:#166534">● Predbilježbe su otvorene</b>' : '<b style="color:#991b1b">● Predbilježbe su zatvorene</b>'}
+      ${p.predbiljezba_adresa ? ` · adresa za roditelje: <a href="${esc(p.predbiljezba_adresa)}" target="_blank">${esc(p.predbiljezba_adresa)}</a>` : ''}
+      <span class="siv">· roditelji vide samo komplete ažurirane za sezonu ${S.sezona} · uključuje se u Postavkama</span>
+      <div class="traka" style="margin-top:6px"><a class="mali" href="http://localhost:8766/" target="_blank">Pogledaj stranicu kako je vide roditelji</a></div></div>
+    <div class="traka"><select id="pfStatus">${['nova', 'prihvaćeno', 'odbijeno', ''].map(v => `<option value="${v}" ${v === S.pf ? 'selected' : ''}>${v || 'sve'}</option>`).join('')}</select>
+      <span class="siv">${l.length} predbilježbi</span></div>
+    ${l.map(x => `<div class="okvir">
+      <div class="traka"><b>#${x.broj}</b> <span class="siv">${datum(x.vrijeme.slice(0, 10))} ${x.vrijeme.slice(11, 16)}</span>
+        <b>${esc(x.kupac)}</b> · ${esc(x.telefon)} ${x.email ? '· ' + esc(x.email) : ''} · ${esc(x.skola || '')} ${esc(x.razred)}. r. <span class="siv">${esc(x.komplet || '')}</span>
+        <span class="status ${x.status === 'odbijeno' ? 'otkazano' : x.status === 'prihvaćeno' ? 'preuzeto' : ''}">${x.status}</span>
+        <div class="desno">${x.narudzba_id ? `<a class="mali" href="#narudzba/${x.narudzba_id}">Narudžba br. ${x.narudzba_broj}</a>` :
+          x.status === 'nova' ? `<button class="mali glavni" data-prihvati="${x.id}">Prebaci u narudžbu</button><button class="mali opasno" data-odbij="${x.id}">Odbij</button>` : ''}</div></div>
+      <div class="siv">${x.knjige.map(b => `${esc(b.naziv)} (${kn(b.cijena)})`).join(' · ')} — ukupno <b>${kn(x.knjige.reduce((a, b) => a + b.cijena, 0))}</b></div>
+      ${x.napomena ? `<div>Napomena: ${esc(x.napomena)}</div>` : ''}</div>`).join('') || '<p class="siv">Nema predbilježbi.</p>'}`;
+  $('#pfStatus').onchange = e => { S.pf = e.target.value; stranicaPredbiljezbe(); };
+  $('#sadrzaj').onclick = async e => {
+    const t = e.target;
+    if (t.dataset.prihvati) {
+      const r = await api('/api/predbiljezba', { id: +t.dataset.prihvati });
+      poruka('Napravljena je narudžba.'); location.hash = '#narudzba/' + r.narudzba_id;
+    } else if (t.dataset.odbij && confirm('Odbiti predbilježbu?')) {
+      await api('/api/predbiljezba', { id: +t.dataset.odbij, akcija: 'odbij' }); stranicaPredbiljezbe();
+    }
+  };
+}
+
+/* ------------------------------------------------ Statistika */
+async function stranicaStatistika() {
+  S.sg = S.sg || S.sezona;
+  const s = await api('/api/statistika?godina=' + S.sg), u = s.ukupno;
+  const stupac = (v, max) => `<div style="background:var(--plava);height:8px;border-radius:4px;width:${max ? Math.max(2, v / max * 100) : 0}%"></div>`;
+  const tablica = (naslovi, redovi) => `<table><thead><tr>${naslovi.map(n => `<th>${n}</th>`).join('')}</tr></thead><tbody>${redovi}</tbody></table>`;
+  const maxSk = Math.max(0, ...s.po_skoli.map(r => r.iznos)), maxK = Math.max(0, ...s.top_knjige.map(r => r.komada));
+  $('#sadrzaj').innerHTML = `
+    <h2>Statistika sezone <select id="sGod">${S.godine.map(g => `<option ${g == S.sg ? 'selected' : ''}>${g}</option>`).join('')}</select></h2>
+    <div class="polja">
+      ${[['Narudžbi', u.narudzbi], ['Knjiga (kom)', u.komada], ['Promet', kn(u.iznos)], ['Uplaćeno akontacija', kn(u.uplaceno)],
+         ['Rabljene otkupljeno', `${s.rabljene.otkupljeno} (${kn(s.rabljene.otkup)})`], ['Rabljene prodano', `${s.rabljene.prodano} (${kn(s.rabljene.prodaja)})`]]
+        .map(([n, v]) => `<div class="okvir" style="margin:0"><div class="siv">${n}</div><div style="font-size:22px;font-weight:600">${v}</div></div>`).join('')}
+    </div>
+    <div class="polja" style="grid-template-columns:repeat(auto-fill,minmax(460px,1fr))">
+      <div><h3>Po školi</h3>${tablica(['Škola', 'Narudžbi', 'Iznos', ''], s.po_skoli.map(r => `<tr><td>${esc(r.skola)}</td><td class="br">${r.narudzbi}</td><td class="br">${kn(r.iznos)}</td><td style="width:30%">${stupac(r.iznos, maxSk)}</td></tr>`).join(''))}</div>
+      <div><h3>Tko plaća</h3>${tablica(['Platitelj', 'Narudžbi', 'Iznos'], s.po_platitelju.map(r => `<tr><td>${esc(r.platitelj)}</td><td class="br">${r.narudzbi}</td><td class="br">${kn(r.iznos)}</td></tr>`).join(''))}
+        <h3>Po statusu</h3>${tablica(['Status', 'Narudžbi'], s.po_statusu.map(r => `<tr><td>${r.status}</td><td class="br">${r.broj}</td></tr>`).join(''))}
+        <h3>Po nakladniku</h3>${tablica(['Nakladnik', 'Kom', 'Iznos'], s.po_nakladniku.map(r => `<tr><td>${esc(r.nakladnik)}</td><td class="br">${r.komada}</td><td class="br">${kn(r.iznos)}</td></tr>`).join(''))}</div>
+      <div><h3>Najtraženije knjige</h3>${tablica(['Naziv', 'Kom', ''], s.top_knjige.map(r => `<tr><td>${esc(r.naziv)}<br><span class="siv">${esc(r.nakladnik)}</span></td><td class="br">${r.komada}</td><td style="width:25%">${stupac(r.komada, maxK)}</td></tr>`).join(''))}</div>
+      <div><h3>Narudžbe po danu</h3>${tablica(['Datum', 'Narudžbi'], s.po_danu.map(r => `<tr><td>${datum(r.datum)}</td><td class="br">${r.broj}</td></tr>`).join(''))}</div>
+    </div>`;
+  $('#sGod').onchange = e => { S.sg = e.target.value; stranicaStatistika(); };
+}
+
+/* ------------------------------------------------ Otvaranje nove godine */
+async function stranicaNovaGodina() {
+  await ucitajOsnovno();
+  const nova = S.sezona + 1;
+  $('#sadrzaj').innerHTML = `
+    <h2>Otvaranje nove godine</h2>
+    <p>Trenutna sezona je <b>${S.sezona}</b>. Stare narudžbe ostaju spremljene i vide se odabirom godine na popisu narudžbi.</p>
+    <div class="okvir"><b>1. Otvori sezonu</b>
+      <p class="siv">Napravi se sigurnosna kopija, a nove narudžbe kreću od broja 1.
+      ${S.otvorene ? `<br>Pažnja: ${S.otvorene} narudžbi iz prošlih sezona nije označeno kao preuzeto.` : ''}</p>
+      <div class="traka">Nova sezona: <input id="ngSezona" value="${nova}" style="width:80px">
+        <label><input type="checkbox" id="ngSakrij"> sakrij knjige koje nisu ni u jednom kompletu</label>
+        <button class="glavni" id="ngOtvori">Otvori sezonu</button></div></div>
+    <div class="okvir"><b>2. Vulpes za novu godinu</b>
+      <p class="siv">Kad u Vulpesu otvorite novu godinu, u Postavkama odaberite novu mapu (gumb "Pronađi Vulpes na računalu").</p>
+      <button onclick="location.hash='#postavke'">Otvori postavke</button></div>
+    <div class="okvir"><b>3. Nove cijene</b>
+      <p class="siv">Usporedi cijene s Vulpesom i preuzmi nove jednim klikom.</p>
+      <button onclick="location.hash='#knjige';setTimeout(usporedbaVulpes,50)">Usporedi cijene</button></div>
+    <div class="okvir"><b>4. Popisi knjiga po školama</b>
+      <p class="siv">Kad škole objave popise (obično lipanj–srpanj), učitaj ih. Kompleti koji još imaju stari popis označeni su žuto
+        (sada ih je ${S.kompleti_stari}).</p>
+      <button onclick="location.hash='#ucitaj-popis'">Učitaj popis škole</button> <button onclick="location.hash='#kompleti'">Pogledaj komplete</button></div>
+    <div class="okvir"><b>5. Napomena na listiću</b>
+      <p class="siv">Promijeni tekst o plaćanju i datumu isporuke za novu sezonu.</p>
+      <button onclick="location.hash='#postavke'">Uredi napomenu</button></div>`;
+  $('#ngOtvori').onclick = async () => {
+    const sez = +$('#ngSezona').value;
+    if (!confirm(`Otvoriti sezonu ${sez}?`)) return;
+    const r = await api('/api/nova-godina', { sezona: sez, sakrij_knjige: $('#ngSakrij').checked });
+    S.filter = {}; S.zf = null;
+    poruka(`Sezona ${sez} otvorena. Kopija: ${r.kopija}` + (r.sakriveno ? `, sakriveno ${r.sakriveno} knjiga` : ''));
+    stranicaNovaGodina();
+  };
+}
+
+/* ------------------------------------------------ Postavke */
+function stranicaPostavke() {
+  const p = S.postavke;
+  $('#sadrzaj').innerHTML = `
+    <h2>Postavke</h2>
+    <div class="polja">
+      <label>Naziv firme<input id="firma" value="${esc(p.firma)}"></label>
+      <label>Adresa<input id="adresa" value="${esc(p.adresa)}"></label>
+      <label>Telefon<input id="telefon" value="${esc(p.telefon)}"></label>
+      <label class="sirok">Napomena na listiću narudžbe<textarea id="napomena_listic">${esc(p.napomena_listic)}</textarea></label>
+      <label class="sirok">Poruka kupcu (WhatsApp/SMS) – {kupac}, {broj}, {ostatak}, {firma} se zamijene podacima<textarea id="poruka_kupcu">${esc(p.poruka_kupcu)}</textarea></label>
+      <label class="sirok">Podsjetnik za nepreuzete knjige (WhatsApp/SMS) – iste zamjene kao gore<textarea id="poruka_podsjetnik">${esc(p.poruka_podsjetnik)}</textarea></label>
+      <label>Podsjetnik nakon koliko dana<input id="podsjetnik_dana" value="${esc(p.podsjetnik_dana)}"></label>
+      <label>Online predbilježba roditelja<select id="predbiljezba_ukljucena"><option value="0">zatvorena</option><option value="1" ${p.predbiljezba_ukljucena === '1' ? 'selected' : ''}>otvorena</option></select></label>
+      <label>Internet adresa predbilježbe (za ispis i poruke)<input id="predbiljezba_adresa" value="${esc(p.predbiljezba_adresa)}" placeholder="https://…"></label>
+      <label class="sirok">Tekst za roditelje na stranici predbilježbe<textarea id="predbiljezba_tekst">${esc(p.predbiljezba_tekst)}</textarea></label>
+      <label>Rabljene: otkup (% nove cijene)<input id="rabljene_otkup_posto" value="${esc(p.rabljene_otkup_posto)}"></label>
+      <label>Rabljene: prodaja (% nove cijene)<input id="rabljene_prodaja_posto" value="${esc(p.rabljene_prodaja_posto)}"></label>
+      <label class="sirok">Dodatna kopija baze – mapa na USB-u ili Google Drive (npr. E:\\ ili G:\\Moj disk\\Knjige). Program tamo svaki dan stavi kopiju.
+        <input id="kopija_mapa" value="${esc(p.kopija_mapa)}" placeholder="prazno = samo kopija u mapi programa">
+        ${p.kopija_stanje ? `<span class="siv" style="color:${p.kopija_stanje.startsWith('OK') ? '#166534' : '#991b1b'}">Zadnja dodatna kopija: ${esc(p.kopija_stanje)}</span>` : ''}</label>
+      <label class="sirok">Vulpes – mapa s podacima za tekuću godinu (npr. C:\\ROBA\\2026) ili put do artikli.DBF
+        <input id="vulpes_artikli" value="${esc(p.vulpes_artikli)}"></label>
+    </div>
+    <div class="traka"><button class="glavni" id="spremi">Spremi</button><button id="pronadi">Pronađi Vulpes na računalu</button><button id="test">Provjeri vezu s Vulpesom</button></div>
+    <div id="nadeno"></div>
+    <details class="okvir"><summary><b>Škole – osnovna ili srednja</b> <span class="siv">(program sam prepozna "OŠ"; ovdje ispravite ako je pogrešno)</span></summary>
+      <table><tbody>${S.skole.map(s => `<tr><td>${esc(s.naziv)}</td><td><select data-skola="${s.id}">${['OŠ', 'SŠ'].map(t => `<option ${t === s.tip ? 'selected' : ''}>${t}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></details>
+    <div class="okvir"><b>Sezona: ${S.sezona}</b> <span class="siv">– nove narudžbe dobivaju brojeve od 1 za ovu sezonu</span>
+      <div class="traka" style="margin-top:8px"><button class="glavni" onclick="location.hash='#nova-godina'">Otvaranje nove godine…</button>
+        <button id="kopija">Napravi sigurnosnu kopiju</button>
+        <button class="opasno" id="ugasi" title="Program radi u pozadini; ovdje ga potpuno zatvarate">Zatvori program</button></div>
+      <p class="siv">Program sam napravi kopiju baze jednom dnevno (mapa sigurnosne_kopije, čuva se zadnjih 30).</p></div>
+    <div class="okvir"><b>Nadogradnja programa</b> <span class="siv">– trenutna verzija ${esc(S.verzija || '')}</span>
+      <p class="siv" style="margin:6px 0">Datoteku "Narudzbe-knjiga-nadogradnja-….zip" samo spremite u Preuzimanja ili na radnu površinu – program je sam pronađe i ponudi.
+        Ili je odaberite ovdje. Podaci se ne diraju; Setup više ne treba pokretati.</p>
+      <div class="traka"><button class="glavni" id="nadUcitaj">Učitaj nadogradnju…</button><input type="file" id="nadDat" accept=".zip" style="display:none"></div></div>
+    <p class="siv">Program iz Vulpesa samo čita (nazive, barkodove, cijene, stanje) i ništa u Vulpesu ne mijenja.<br>Kad Vulpes otvori novu godinu, ovdje upiši novu mapu.</p>`;
+  const spremi = async () => {
+    const d = {};
+    for (const k of ['firma', 'adresa', 'telefon', 'napomena_listic', 'vulpes_artikli', 'poruka_kupcu', 'rabljene_otkup_posto', 'rabljene_prodaja_posto', 'poruka_podsjetnik', 'podsjetnik_dana', 'predbiljezba_ukljucena', 'predbiljezba_adresa', 'predbiljezba_tekst', 'kopija_mapa']) d[k] = $('#' + k).value;
+    S.postavke = await api('/api/postavke', d);
+  };
+  $('#spremi').onclick = async () => { await spremi(); poruka('Postavke spremljene.'); };
+  $('#ugasi').onclick = async () => {
+    if (!confirm('Zatvoriti program? Predbilježbe s interneta neće raditi dok ga ponovno ne pokrenete.')) return;
+    await api('/api/ugasi', {});
+    document.body.innerHTML = '<p style="padding:40px;font-size:18px">Program je zatvoren. Ovu karticu preglednika možete zatvoriti.<br>Ponovno ga pokrenite ikonom "Narudžbe knjiga" na radnoj površini.</p>';
+  };
+  document.querySelectorAll('[data-skola]').forEach(sel => sel.onchange = async () => {
+    await api('/api/skola', { id: +sel.dataset.skola, tip: sel.value });
+    S.skole.find(s => s.id == sel.dataset.skola).tip = sel.value; poruka('Spremljeno.');
+  });
+  $('#nadUcitaj').onclick = () => $('#nadDat').click();
+  $('#nadDat').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (f) nadogradi({ sadrzaj: await datotekaBase64(f) }); };
+  $('#kopija').onclick = async () => {
+    await spremi(); const r = await api('/api/kopija', {});
+    S.postavke = (await api('/api/init')).postavke;
+    poruka('Kopija spremljena: ' + r.kopija + (S.postavke.kopija_stanje ? ' · dodatna: ' + S.postavke.kopija_stanje : ''), S.postavke.kopija_stanje.startsWith('GREŠKA'));
+  };
+  $('#pronadi').onclick = async () => {
+    $('#nadeno').innerHTML = '<p>Tražim Vulpes po diskovima, pričekaj do 15 sekundi…</p>';
+    const l = await api('/api/vulpes/pronadi');
+    $('#nadeno').innerHTML = l.length ? `<div class="okvir"><b>Pronađene Vulpes mape</b> <span class="siv">(najnovija je obično tekuća godina) – klikni za odabir</span>
+      <table><tbody>${l.map(x => `<tr class="klik" data-m="${esc(x.mapa)}"><td>${esc(x.mapa)}</td><td class="siv">artikli mijenjani ${x.izmijenjeno}</td></tr>`).join('')}</tbody></table></div>`
+      : '<p>Nisam pronašao Vulpes. Upiši mapu ručno (mapa u kojoj je artikli.DBF).</p>';
+    $('#nadeno').onclick = async e => {
+      const tr = e.target.closest('tr[data-m]'); if (!tr) return;
+      $('#vulpes_artikli').value = tr.dataset.m; await spremi(); poruka('Vulpes mapa spremljena.');
+    };
+  };
+  $('#test').onclick = async () => {
+    await spremi();
+    const r = await api('/api/vulpes/trazi?q=' + encodeURIComponent('A'));
+    poruka(r.length ? 'Veza s Vulpesom radi.' : 'Vulpes je pronađen, ali je prazan?', !r.length);
+  };
+}
+
+/* ------------------------------------------------ Navigacija */
+async function ruta() {
+  const h = location.hash || '#narudzbe';
+  const kljuc = { '#narudzba': '#narudzbe', '#ucitaj-popis': '#kompleti', '#nova-godina': '#postavke', '#narudzbenica': '#nakladnici', '#zbirno': '#nakladnici' }[h.split('/')[0]] || h.split('/')[0];
+  document.querySelectorAll('header a').forEach(a => a.classList.toggle('aktivno', a.getAttribute('href') === kljuc));
+  $('#ispis').innerHTML = ''; $('#sadrzaj').onclick = null;
+  if (h === '#nova') return stranicaNarudzba(null);
+  if (h.startsWith('#narudzba/')) return stranicaNarudzba(+h.split('/')[1]);
+  if (h === '#zbirno') return stranicaZbirno();
+  if (h === '#kompleti') return stranicaKompleti();
+  if (h === '#ucitaj-popis') return stranicaUcitajPopis();
+  if (h === '#nova-godina') return stranicaNovaGodina();
+  if (h === '#stiglo') return stranicaStiglo();
+  if (h === '#predbiljezbe') return stranicaPredbiljezbe();
+  if (h === '#nakladnici') return stranicaNakladnici();
+  if (h.startsWith('#narudzbenica/')) return stranicaNarudzbenica(h.split('/')[1]);
+  if (h === '#rabljene') return stranicaRabljene();
+  if (h === '#statistika') return stranicaStatistika();
+  if (h === '#knjige') return stranicaKnjige();
+  if (h === '#postavke') return stranicaPostavke();
+  return stranicaNarudzbe();
+}
+try { S.razina = localStorage.getItem('razina') || ''; } catch { S.razina = ''; }
+const oznaciRazinu = () => document.querySelectorAll('#razina button').forEach(b => b.classList.toggle('aktivno', b.dataset.r === S.razina));
+document.querySelectorAll('#razina button').forEach(b => b.onclick = () => {
+  S.razina = b.dataset.r; try { localStorage.setItem('razina', S.razina); } catch {}
+  S.filter.skola = ''; S.kf = ''; if (S.zf) S.zf.skola = '';
+  oznaciRazinu(); ruta();
+});
+oznaciRazinu();
+window.onhashchange = ruta;
+ucitajOsnovno().then(ruta);
+</script>
+</body>
+</html>
