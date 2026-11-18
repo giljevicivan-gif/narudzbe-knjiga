@@ -96,6 +96,8 @@ def predbiljezba(c, d, ip):
     if greska:
         raise ValueError(greska)
     sez = _sezona(c)
+    if not c.in_transaction:
+        c.execute('BEGIN IMMEDIATE')  # da dvije istovremene predbilježbe ne dobiju isti broj
     broj = c.execute('SELECT COALESCE(MAX(broj), 0) + 1 FROM predbiljezbe WHERE godina = ?', (sez,)).fetchone()[0]
     c.execute('INSERT INTO predbiljezbe(godina, broj, vrijeme, kupac, telefon, email, skola_id, razred, komplet_id, knjige, '
               "napomena, status, ip) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'nova', ?)",
@@ -128,7 +130,11 @@ class JavniHandler(BaseHTTPRequestHandler):
         pass
 
     def ip(self):
-        return (self.headers.get('Cf-Connecting-Ip') or self.headers.get('X-Forwarded-For') or self.client_address[0]).split(',')[0].strip()
+        klijent = self.client_address[0]
+        xff = self.headers.get('X-Forwarded-For')
+        if klijent in ('127.0.0.1', '::1') and xff:  # iza tunela: zadnju adresu dodaje tunel, ostale može izmisliti posjetitelj
+            return xff.split(',')[-1].strip() or klijent
+        return klijent
 
     def posalji(self, kod, tijelo, tip='application/json; charset=utf-8'):
         self.send_response(kod)

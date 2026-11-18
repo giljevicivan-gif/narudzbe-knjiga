@@ -27,6 +27,12 @@ GITHUB = 'giljevicivan-gif/narudzbe-knjiga'  # javni repozitorij s kodom program
 _gh = {'vrijeme': 0, 'verzija': None, 'greska': ''}
 
 
+def dozvoljena(ime):
+    """Datoteke programa koje nadogradnja smije zamijeniti (nikad baza, postavke ni logo).
+    Uz popis prihvaća i nove .py/.html datoteke, da buduće verzije s novom datotekom mogu doći nadogradnjom."""
+    return ime in DOZVOLJENE or bool(re.fullmatch(r'[A-Za-z0-9_\-]+\.(py|html)', ime))
+
+
 def kljuc(verzija):
     return tuple(int(x) for x in re.findall(r'\d+', verzija or ''))
 
@@ -45,11 +51,15 @@ def procitaj(sadrzaj):
     for ime in imena:
         if ime == 'verzija.txt':
             continue
-        if ime not in DOZVOLJENE:
+        if not dozvoljena(ime):
             raise ValueError('Nadogradnja sadrži nepoznatu datoteku: %s' % ime)
         datoteke[ime] = z.read(ime)
     if 'knjige.py' not in datoteke:
         raise ValueError('Nadogradnja nema knjige.py.')
+    u_kodu = re.search(r"^VERZIJA = '([^']+)'", datoteke['knjige.py'].decode('utf-8', 'replace'), re.M)
+    if not u_kodu or u_kodu.group(1) != verzija:
+        raise ValueError('Nadogradnja nije ispravno složena (verzija.txt %s, knjige.py %s).'
+                         % (verzija, u_kodu.group(1) if u_kodu else '?'))
     for ime, d in datoteke.items():
         if ime.endswith('.py'):
             try:
@@ -167,7 +177,7 @@ def github_zip(repo=GITHUB):
     with zipfile.ZipFile(izlaz, 'w', zipfile.ZIP_DEFLATED) as zout:
         for i in z.infolist():
             ime = i.filename.split('/', 1)[-1]  # makni mapu "narudzbe-knjiga-main/"
-            if ime in DOZVOLJENE or ime == 'verzija.txt':
+            if '/' not in ime and (dozvoljena(ime) or ime == 'verzija.txt'):
                 zout.writestr(ime, z.read(i.filename))
     _gh['vrijeme'] = 0
     return izlaz.getvalue()

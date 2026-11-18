@@ -58,8 +58,8 @@
   .polja-o { display: grid; grid-template-columns: 1.4fr 1fr; gap: 6px 16px; margin: 5px 0; }
   .odrezak { border-top: 1.5px dashed #000; margin-top: 10px; padding-top: 6px; position: relative; }
   .odrezak > span { position: absolute; top: -10px; left: -2px; background: #fff; font-size: 14px; }
-  .logo { float: left; height: 52px; margin-right: 10px; }
-  .logo.mali { height: 38px; }
+  .logo { float: left; height: 68px; margin-right: 10px; }
+  .logo.mali { height: 46px; }
   .listic svg { display: block; margin-top: 2px; }
   .neaktivna { color: #9ca3af; }
   .zbroj { font-size: 17px; display: flex; gap: 24px; justify-content: flex-end; flex-wrap: wrap; margin: 10px 0; }
@@ -69,8 +69,9 @@
   .siv { color: #6b7280; font-size: 13px; }
   #poruka { position: fixed; bottom: 16px; right: 16px; padding: 10px 16px; border-radius: 6px; color: #fff; display: none; z-index: 10; }
   #ispis { display: none; }
+  @page { size: A4; margin: 9mm; }
   @media print {
-    header, main, #poruka { display: none !important; }
+    header, main, #poruka, #nadBanner { display: none !important; }
     #ispis { display: block; font-size: 12px; }
     #ispis table { margin: 6px 0; }
     #ispis th { background: none; border-bottom: 1px solid #000; }
@@ -118,6 +119,14 @@ async function api(put, podaci) {
   if (!r.ok) { poruka(j.greska || 'Greška', true); throw new Error(j.greska); }
   return j;
 }
+/* Ispis: pričeka da se logo (i ostale slike) učitaju, inače ga preglednik zna izostaviti s papira */
+async function ispisi() {
+  const slike = [...document.querySelectorAll('#ispis img')].filter(i => !i.complete);
+  await Promise.all(slike.map(i => new Promise(r => { i.addEventListener('load', r); i.addEventListener('error', r); setTimeout(r, 3000); })));
+  window.print();
+}
+const zaglavljeIspisa = (desno = '') => `<div style="display:flex;justify-content:space-between"><div style="display:flow-root;flex:1;min-width:0"><img src="/logo.png" class="logo mali" alt="" onerror="this.remove()"><b>${esc(S.postavke.firma)}</b><br>${esc(S.postavke.adresa)} · tel. ${esc(S.postavke.telefon)}</div><div style="text-align:right">${desno}</div></div>`;
+new Image().src = '/logo.png';  // učitaj logo unaprijed da je spreman za ispis
 function poruka(tekst, greska) {
   const p = $('#poruka');
   p.textContent = tekst; p.style.background = greska ? 'var(--crvena)' : 'var(--zelena)'; p.style.display = 'block';
@@ -312,7 +321,7 @@ async function ispisObrazaca(ids) {
     }).join('');
     const uk = k.knjige.reduce((a, b) => a + b.cijena, 0);
     return `<div class="obrazac">
-      <div style="display:flex;justify-content:space-between"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)} · tel. ${esc(p.telefon)}</div>
+      <div style="display:flex;justify-content:space-between"><div style="display:flow-root;flex:1;min-width:0"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)} · tel. ${esc(p.telefon)}</div>
         <div style="text-align:right"><b style="font-size:15px">NARUDŽBA UDŽBENIKA ${god}</b><br>Br. narudžbe: ${crta('70px')}</div></div>
       <h3>${esc(k.skola || '')} · ${esc(k.razred)}. RAZRED · ${esc(k.naziv)}</h3>
       <div class="polja-o">
@@ -326,13 +335,13 @@ async function ispisObrazaca(ids) {
         <div>Plaća: ${kv} roditelj &nbsp; ${kv} Grad &nbsp; ${kv} CZSS &nbsp; ${kv} ${crta('70px')}</div><div>Zaprimio: ${crta('150px')}</div></div>
       ${p.napomena_listic ? `<p style="margin:6px 0"><b>${esc(p.napomena_listic)}</b></p>` : ''}
       <div class="odrezak"><span>✂</span>
-        <div style="display:flex;justify-content:space-between;gap:12px"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo mali" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b> · tel. ${esc(p.telefon)}<br>POTVRDA O NARUDŽBI udžbenika ${god}<br>
+        <div style="display:flex;justify-content:space-between;gap:12px"><div style="display:flow-root;flex:1;min-width:0"><img src="/logo.png" class="logo mali" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b> · tel. ${esc(p.telefon)}<br>POTVRDA O NARUDŽBI udžbenika ${god}<br>
           ${esc(k.skola || '')} · ${esc(k.razred)}. r. · ${esc(k.naziv)}</div>
           <div>Br. narudžbe: ${crta('70px')}<br>Kupac: ${crta('150px')}<br>Akontacija: ${crta('70px')} € &nbsp; Datum: ${crta('70px')}</div></div>
         <div class="siv">Javit ćemo Vam se kad knjige stignu. Ponesite ovu potvrdu.</div></div>
     </div>`;
   }).join('');
-  window.print();
+  await ispisi();
 }
 
 /* ------------------------------------------------ Narudžbe */
@@ -376,7 +385,7 @@ async function stranicaNarudzbe() {
       <td class="br">${n.komada}</td><td class="br">${kn(n.iznos)}</td><td class="br">${kn(n.akontacija)}</td><td class="br">${kn(n.iznos - n.akontacija)}</td>
       <td><span class="status ${n.status}">${n.status}</span>${cekaDana(n) >= +S.postavke.podsjetnik_dana ? `<span class="znacka crvena" title="Stiglo ${datum(n.stiglo_datum)}">⏰ ${cekaDana(n)} d</span>` : ''}</td>
       <td onclick="event.stopPropagation()">${gumbiObavijesti(n, n.iznos - n.akontacija)}</td></tr>`).join('');
-    const uk = vidljive.reduce((a, n) => a + n.iznos, 0);
+    const uk = vidljive.filter(n => n.status !== 'otkazano').reduce((a, n) => a + n.iznos, 0);
     $('#info').textContent = `${vidljive.length} narudžbi · ukupno ${kn(uk)}`;
   };
   crtaj();
@@ -407,13 +416,13 @@ async function ispisListica(ids = oznacene()) {
     const uk = n.stavke.reduce((a, s) => a + s.cijena * s.kolicina, 0), ost = uk - n.akontacija;
     const god = `${n.godina}./${n.godina + 1}.`, pl = n.platitelj || '', imaPred = n.stavke.some(s => s.predmet);
     return `<div class="obrazac listic">
-      <div style="display:flex;justify-content:space-between"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)} · tel. ${esc(p.telefon)}</div>
+      <div style="display:flex;justify-content:space-between"><div style="display:flow-root;flex:1;min-width:0"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)} · tel. ${esc(p.telefon)}</div>
         <div style="text-align:right"><b style="font-size:15px">NARUDŽBA UDŽBENIKA br. ${n.broj}/${n.godina}</b><br>šk. god. ${god} · datum ${datum(n.datum)}</div></div>
       <div class="polja-o" style="margin-top:8px">
         <div>Kupac (roditelj): <b>${esc(n.kupac)}</b></div><div>Mobitel: <b>${esc(n.telefon)}</b></div>
         <div>Škola: <b>${esc(n.skola || '')}</b></div><div>Razred: <b>${esc(n.razred)}</b></div></div>
-      <table><thead><tr><th>✓</th>${imaPred ? '<th>Predmet</th>' : ''}<th>Naslov</th><th>Nakladnik</th><th class="br">Kol.</th><th class="br">Cijena</th><th class="br">Iznos</th></tr></thead><tbody>
-      ${n.stavke.map(s => `<tr><td class="kvc">${da}</td>${imaPred ? `<td>${esc(s.predmet || '')}</td>` : ''}<td>${esc(s.naziv)}${ean13(s.barkod, 22)}</td><td>${esc(s.nakladnik)}</td>
+      <table><thead><tr><th>✓</th>${imaPred ? '<th>Predmet</th>' : ''}<th>Naslov</th><th></th><th>Nakladnik</th><th class="br">Kol.</th><th class="br">Cijena</th><th class="br">Iznos</th></tr></thead><tbody>
+      ${n.stavke.map(s => `<tr><td class="kvc">${da}</td>${imaPred ? `<td>${esc(s.predmet || '')}</td>` : ''}<td>${esc(s.naziv)}</td><td style="width:1%">${ean13(s.barkod, 14)}</td><td>${esc(s.nakladnik)}</td>
         <td class="br">${s.kolicina}</td><td class="br">${kn(s.cijena)}</td><td class="br">${kn(s.cijena * s.kolicina)}</td></tr>`).join('')}
       </tbody></table>
       <div class="polja-o" style="margin-top:6px">
@@ -425,19 +434,19 @@ async function ispisListica(ids = oznacene()) {
       ${p.napomena_listic ? `<p style="margin:4px 0"><b>${esc(p.napomena_listic)}</b></p>` : ''}
       <div class="polja-o" style="margin-top:14px"><div>Potpis kupca: <span class="crta" style="width:170px"></span></div><div>Zaprimio: <span class="crta" style="width:150px"></span></div></div>
       <div class="odrezak"><span>✂</span>
-        <div style="display:flex;justify-content:space-between;gap:12px"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo mali" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b> · tel. ${esc(p.telefon)}<br>
+        <div style="display:flex;justify-content:space-between;gap:12px"><div style="display:flow-root;flex:1;min-width:0"><img src="/logo.png" class="logo mali" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b> · tel. ${esc(p.telefon)}<br>
           <b>POTVRDA O NARUDŽBI br. ${n.broj}/${n.godina}</b> · ${datum(n.datum)}<br>${esc(n.kupac)} · ${esc(n.skola || '')} ${esc(n.razred)}. r.</div>
           <div style="text-align:right">Knjiga: ${n.stavke.reduce((a, s) => a + s.kolicina, 0)} · ukupno ${kn(uk)}<br>Akontacija: <b>${kn(n.akontacija)}</b><br><b>Za platiti: ${kn(ost)}</b></div></div>
         <div class="siv">Javit ćemo Vam se kad knjige stignu. Ponesite ovu potvrdu.</div></div>
     </div>`;
   }).join('');
-  window.print();
+  await ispisi();
 }
-function ispisPopisa() {
+async function ispisPopisa() {
   const ns = S.vidljiveNarudzbe || [];
-  $('#ispis').innerHTML = `<h3>Popis narudžbi (${ns.length})</h3><table><thead><tr><th>Br.</th><th>Datum</th><th>Kupac</th><th>Telefon</th><th>Škola</th><th>Raz.</th><th class="br">Iznos</th><th class="br">Ostatak</th><th>Status</th></tr></thead><tbody>
+  $('#ispis').innerHTML = zaglavljeIspisa(`Datum: ${datum(new Date().toLocaleDateString('sv-SE'))}`) + `<h3>Popis narudžbi (${ns.length})</h3><table><thead><tr><th>Br.</th><th>Datum</th><th>Kupac</th><th>Telefon</th><th>Škola</th><th>Raz.</th><th class="br">Iznos</th><th class="br">Ostatak</th><th>Status</th></tr></thead><tbody>
     ${ns.map(n => `<tr><td>${n.broj}</td><td>${datum(n.datum)}</td><td>${esc(n.kupac)}</td><td>${esc(n.telefon)}</td><td>${esc(n.skola || '')}</td><td>${esc(n.razred)}</td><td class="br">${kn(n.iznos)}</td><td class="br">${kn(n.iznos - n.akontacija)}</td><td>${n.status}</td></tr>`).join('')}</tbody></table>`;
-  window.print();
+  await ispisi();
 }
 
 /* ------------------------------------------------ Jedna narudžba */
@@ -477,7 +486,7 @@ async function stranicaNarudzba(id) {
       ${id ? '<div class="desno"><button class="opasno" onclick="obrisiNarudzbu()">Obriši narudžbu</button></div>' : ''}
     </div>`;
   S.n = n;
-  api('/api/rabljene?status=' + encodeURIComponent('na stanju')).then(r => { S.rabljeneStanje = r; crtajStavke(); });
+  api('/api/rabljene?status=' + encodeURIComponent('na stanju')).then(r => { S.rabljeneStanje = r; if ($('#stavke')) crtajStavke(); });
   $('#telefon').onblur = async () => {
     if (id || $('#kupac').value.trim() && $('#skola').value) return;
     const l = await api('/api/kupac?telefon=' + encodeURIComponent($('#telefon').value));
@@ -591,10 +600,10 @@ async function stranicaZbirno() {
       <select id="zGod">${godinaOpcije(f.godina)}</select>
       <select id="zStatus">${statusOpcije(f.status, 'svi statusi')}</select>
       <select id="zSkola">${skolaOpcije(f.skola, 'sve škole')}</select>
-      <div class="desno"><button onclick="location.href=sRazinom('/csv/zbirno?${q}')">Excel (CSV)</button><button onclick="window.print()">Ispiši</button></div>
+      <div class="desno"><button onclick="location.href=sRazinom('/csv/zbirno?${q}')">Excel (CSV)</button><button onclick="ispisi()">Ispiši</button></div>
     </div>
     <table><thead><tr><th>Naziv</th><th>Barkod</th><th class="br">Količina</th><th class="br">Cijena</th><th></th></tr></thead><tbody>${tablica()}</tbody></table>`;
-  $('#ispis').innerHTML = `<h3>Zbirni popis · ${esc(f.status || 'svi statusi')} · ${esc(f.godina || '')}</h3><table>${tablica()}</table>`;
+  $('#ispis').innerHTML = zaglavljeIspisa(`Datum: ${datum(new Date().toLocaleDateString('sv-SE'))}`) + `<h3>Zbirni popis · ${esc(f.status || 'svi statusi')} · ${esc(f.godina || '')}</h3><table>${tablica()}</table>`;
   for (const [id, k] of [['zGod', 'godina'], ['zStatus', 'status'], ['zSkola', 'skola']])
     $('#' + id).onchange = e => { f[k] = e.target.value; stranicaZbirno(); };
 }
@@ -927,8 +936,8 @@ function obavijestiSve(ns) {
 async function ispisPlatitelja(f, q) {
   const ns = await api('/api/platitelj?' + q), p = S.postavke;
   const uk = ns.reduce((a, n) => a + n.iznos, 0), sk = S.skole.find(s => s.id == f.skola);
-  $('#ispis').innerHTML = `<div style="display:flex;justify-content:space-between"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)} · tel. ${esc(p.telefon)}</div>
-      <div style="text-align:right">Datum: ${datum(new Date().toISOString().slice(0, 10))}</div></div>
+  $('#ispis').innerHTML = `<div style="display:flex;justify-content:space-between"><div style="display:flow-root;flex:1;min-width:0"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)} · tel. ${esc(p.telefon)}</div>
+      <div style="text-align:right">Datum: ${datum(new Date().toLocaleDateString('sv-SE'))}</div></div>
     <h3>Popis učenika i udžbenika – plaća: ${esc(f.platitelj)}</h3>
     <p>Školska godina ${f.godina ? `${f.godina}./${+f.godina + 1}.` : ''}${sk ? ' · ' + esc(sk.naziv) : ''}${S.razina ? ' · ' + (S.razina === 'OŠ' ? 'osnovne škole' : 'srednje škole') : ''} · ${ns.length} učenika</p>
     <table><thead><tr><th>#</th><th>Br. nar.</th><th>Učenik / kupac</th><th>Škola</th><th>Raz.</th><th>Knjige</th><th class="br">Iznos</th></tr></thead><tbody>
@@ -936,7 +945,7 @@ async function ispisPlatitelja(f, q) {
       <td style="font-size:11px">${n.stavke.map(s => esc(s.naziv) + (s.kolicina > 1 ? ' ×' + s.kolicina : '')).join('; ')}</td><td class="br">${kn(n.iznos)}</td></tr>`).join('')}
     </tbody></table><p style="text-align:right;font-size:15px">Ukupno: <b>${kn(uk)}</b></p>
     <p style="margin-top:30px">Potpis i pečat: ______________________</p>`;
-  if (confirm('Ispisati popis? (Odustani = preuzmi Excel/CSV)')) window.print();
+  if (confirm('Ispisati popis? (Odustani = preuzmi Excel/CSV)')) await ispisi();
   else location.href = sRazinom('/csv/platitelj?' + q);
 }
 
@@ -1017,7 +1026,7 @@ async function stranicaNakladnici() {
     poruka(`Napravljeno ${r.ids.length} narudžbenica.`); ispisNarudzbenica(r.ids);
   };
   $('#ispisiDanas').onclick = () => {
-    const danas = new Date().toISOString().slice(0, 10);
+    const danas = new Date().toLocaleDateString('sv-SE');
     const ids = nar.filter(n => n.datum === danas && n.tip !== 'povrat' && (!S.razina || n.razina === S.razina || !n.razina)).map(n => n.id);
     ids.length ? ispisNarudzbenica(ids) : poruka('Danas nema narudžbenica.', true);
   };
@@ -1026,7 +1035,7 @@ async function stranicaNakladnici() {
 function dokumentNarudzbenice(n) {
   const p = S.postavke, kom = n.stavke.reduce((a, s) => a + s.kolicina, 0), naslov = n.tip === 'povrat' ? 'POVRATNICA' : 'NARUDŽBENICA';
   return `
-    <div style="display:flex;justify-content:space-between"><div style="display:flow-root;white-space:nowrap"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)}<br>tel. ${esc(p.telefon)}</div>
+    <div style="display:flex;justify-content:space-between"><div style="display:flow-root;flex:1;min-width:0"><img src="/logo.png" class="logo" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b><br>${esc(p.adresa)}<br>tel. ${esc(p.telefon)}</div>
       <div style="text-align:right"><b style="font-size:17px">${naslov} br. ${n.broj}/${n.godina}</b><br>Datum: ${datum(n.datum)}</div></div>
     <p>Nakladnik: <b>${esc(n.nakladnik)}</b>${n.razina ? ` &nbsp; (${n.razina === 'OŠ' ? 'osnovne škole' : 'srednje škole'})` : ''}</p>
     <table><thead><tr><th>#</th><th>Naziv</th><th>Barkod</th><th class="br">Količina</th></tr></thead><tbody>
@@ -1036,7 +1045,7 @@ function dokumentNarudzbenice(n) {
 async function ispisNarudzbenica(ids) {
   const ns = await Promise.all(ids.map(id => api('/api/narudzbenica?id=' + id)));
   $('#ispis').innerHTML = ns.map(n => `<div class="listic">${dokumentNarudzbenice(n)}</div>`).join('');
-  window.print();
+  await ispisi();
   stranicaNakladnici();
 }
 async function stranicaNarudzbenica(param) {
@@ -1047,7 +1056,7 @@ async function stranicaNarudzbenica(param) {
   const dokument = dokumentNarudzbenice(n);
   $('#sadrzaj').innerHTML = `<div class="okvir">${dokument}</div>
     <div class="traka"><label>E-mail nakladnika <input id="nEmail" value="${esc(n.email)}" style="min-width:260px"></label>
-      <button class="glavni" id="nMail">Pošalji e-mailom</button><button onclick="window.print()">Ispiši</button>
+      <button class="glavni" id="nMail">Pošalji e-mailom</button><button onclick="ispisi()">Ispiši</button>
       ${povrat ? '' : `<button class="glavni" id="nExcel" title="Upiše količine u Excel narudžbenicu koju je poslao nakladnik">📗 Popuni Excel nakladnika</button>
         <input type="file" id="nExcelDat" accept=".xlsx" style="display:none">`}
       <button onclick="location.href='/csv/narudzbenica?id=${n.id}'">Excel (CSV)</button><button onclick="location.hash='#nakladnici'">Natrag</button>

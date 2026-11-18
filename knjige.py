@@ -26,7 +26,7 @@ import nadogradnja
 import obrasci
 import popis
 
-VERZIJA = '2026.11.16'
+VERZIJA = '2026.11.18'
 MAPA = os.path.dirname(os.path.abspath(__file__))
 BAZA = os.path.join(MAPA, 'knjige.db')
 CONFIG = os.path.join(MAPA, 'postavke.json')
@@ -95,6 +95,12 @@ def db():
     c.row_factory = sqlite3.Row
     c.execute('PRAGMA journal_mode=WAL')
     return c
+
+
+def zakljucaj(c):
+    """Zaključaj bazu za pisanje prije dodjele novog broja (da dva istovremena unosa ne dobiju isti broj)."""
+    if not c.in_transaction:
+        c.execute('BEGIN IMMEDIATE')
 
 
 @contextlib.contextmanager
@@ -558,6 +564,10 @@ def api_post(c, put, d):
         verzija, _ = nadogradnja.procitaj(sadrzaj)
         if nadogradnja.kljuc(verzija) < nadogradnja.kljuc(VERZIJA):
             raise ValueError('To je starija verzija (%s) od ove koja radi (%s).' % (verzija, VERZIJA))
+        try:  # za svaki slučaj kopija baze prije nadogradnje
+            sigurnosna_kopija('prije_nadogradnje_%s.db' % VERZIJA)
+        except Exception as e:
+            print('Kopija prije nadogradnje nije uspjela:', e)
         nadogradnja.instaliraj(sadrzaj)
 
         def restart():
@@ -644,6 +654,7 @@ def api_post(c, put, d):
             raise ValueError('Narudžbenica nema nijednu knjigu s količinom.')
         god = sezona(c)
         tip = 'povrat' if d.get('tip') == 'povrat' else 'narudzba'
+        zakljucaj(c)
         broj = c.execute('SELECT COALESCE(MAX(broj), 0) + 1 FROM narudzbenice WHERE godina = ? AND tip = ?', (god, tip)).fetchone()[0]
         nid = c.execute('INSERT INTO narudzbenice(godina, broj, datum, nakladnik, napomena, tip, razina) VALUES(?, ?, ?, ?, ?, ?, ?)',
                         (god, broj, datetime.date.today().isoformat(), d['nakladnik'], d.get('napomena', ''), tip,
@@ -893,6 +904,7 @@ def spremi_narudzbu(c, d):
         c.execute('DELETE FROM stavke WHERE narudzba_id = ?', (nid,))
     else:
         danas, god = datetime.date.today(), sezona(c)
+        zakljucaj(c)
         broj = c.execute('SELECT COALESCE(MAX(broj), 0) + 1 FROM narudzbe WHERE godina = ?', (god,)).fetchone()[0]
         nid = c.execute('INSERT INTO narudzbe(kupac, telefon, skola_id, razred, akontacija, nacin_pl, napomena, status, '
                         'platitelj, godina, broj, datum) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -916,12 +928,15 @@ PREDLOZAK = ['Škola', 'Smjer', 'Razred', 'Barkod', 'Naziv', 'Nakladnik', 'Cijen
 def citaj_tablicu(ime, sadrzaj):
     if ime.lower().endswith('.xlsx'):
         return popis.citaj_xlsx(sadrzaj)
+    tekst = None
     for enc in ('utf-8-sig', 'cp1250'):
         try:
             tekst = sadrzaj.decode(enc)
             break
         except UnicodeDecodeError:
             pass
+    if tekst is None:
+        tekst = sadrzaj.decode('cp1250', 'replace')
     sep = ';' if tekst.count(';') >= tekst.count(',') else ','
     return list(csv.reader(io.StringIO(tekst), delimiter=sep))
 
@@ -1036,7 +1051,7 @@ def csv_odgovor(naslovi, redovi):
 
 
 def api_csv(c, put, q):
-    g = lambda k: q.get(k, [''])[0]
+    g = lambda k, d='': q.get(k, [d])[0]
     if put == '/csv/narudzbe':
         ns = lista_narudzbi(c, g('godina'), g('status'), g('skola'), g('platitelj', '*'), g('razina'))
         return csv_odgovor(['Broj', 'Datum', 'Kupac', 'Telefon', 'Škola', 'Razred', 'Komada', 'Iznos', 'Akontacija',
@@ -1088,7 +1103,17 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # poruka ide korisniku u preglednik
             self.posalji(400, json.dumps({'greska': str(e)}, ensure_ascii=False).encode('utf-8'))
 
+    def dozvoljen_host(self):
+        # zaštita od tuđih web stranica (DNS rebinding): adresa mora biti localhost, IP ili ime računala u mreži
+        host = (self.headers.get('Host') or '').rsplit(':', 1)[0].strip('[]').lower()
+        if host == 'localhost' or '.' not in host or re.fullmatch(r'[\d.]+|[0-9a-f:]+', host):
+            return True
+        self.posalji(403, b'{"greska": "Nedozvoljena adresa"}')
+        return False
+
     def do_GET(self):
+        if not self.dozvoljen_host():
+            return
         u = urlparse(self.path)
         if u.path in ('/', '/index.html'):
             with open(os.path.join(MAPA, 'index.html'), 'rb') as f:
@@ -1105,6 +1130,11 @@ class Handler(BaseHTTPRequestHandler):
         self.obradi(lambda c: api_get(c, u.path, q))
 
     def do_POST(self):
+        if not self.dozvoljen_host():
+            return
+        if not (self.headers.get('Content-Type') or '').startswith('application/json'):
+            # program uvijek šalje JSON; ovo sprječava da neka web stranica u pregledniku šalje naredbe programu
+            return self.posalji(403, b'{"greska": "Nedozvoljen zahtjev"}')
         u = urlparse(self.path)
         d = json.loads(self.rfile.read(int(self.headers.get('Content-Length') or 0)) or b'{}')
         self.obradi(lambda c: api_post(c, u.path, d))
@@ -1171,14 +1201,21 @@ def main():
         sys.stdout = sys.stderr = open(os.path.join(MAPA, 'program.log'), 'a', encoding='utf-8', buffering=1)
     init_db()
     if '--provjera' in sys.argv:  # nadogradnja provjerava može li se nova verzija pokrenuti
+        ThreadingHTTPServer(('127.0.0.1', 0), Handler).server_close()  # i može li se pokrenuti poslužitelj
+        with open(os.path.join(MAPA, 'index.html'), encoding='utf-8') as f:
+            if '</html>' not in f.read():
+                raise SystemExit('index.html je oštećen')
         print('ok', VERZIJA)
         return
     if len(sys.argv) > 2 and sys.argv[1] == '--uvoz':
         return uvoz_starog(sys.argv[2])
     cfg = {'port': 8765, 'mreza': False, 'javni_port': 8766}
     if os.path.exists(CONFIG):
-        with open(CONFIG, encoding='utf-8') as f:
-            cfg.update(json.load(f))
+        try:
+            with open(CONFIG, encoding='utf-8-sig') as f:
+                cfg.update(json.load(f))
+        except ValueError as e:
+            print('postavke.json je neispravan, koristim zadane postavke:', e)
     else:
         with open(CONFIG, 'w', encoding='utf-8') as f:
             json.dump(cfg, f, indent=2)

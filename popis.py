@@ -43,6 +43,8 @@ def redovi_iz_datoteke(ime, sadrzaj):
                 break
             except UnicodeDecodeError:
                 pass
+        if tekst is None:
+            tekst = sadrzaj.decode('cp1250', 'replace')
         sep = ';' if tekst.count(';') >= tekst.count('\t') else '\t'
         redovi = list(csv.reader(io.StringIO(tekst), delimiter=sep))
     redovi = [[re.sub(r'\s+', ' ', str(c or '')).strip() for c in r] for r in redovi]
