@@ -26,7 +26,7 @@ import nadogradnja
 import obrasci
 import popis
 
-VERZIJA = '2026.11.18'
+VERZIJA = '2026.11.27'
 MAPA = os.path.dirname(os.path.abspath(__file__))
 BAZA = os.path.join(MAPA, 'knjige.db')
 CONFIG = os.path.join(MAPA, 'postavke.json')
@@ -143,6 +143,19 @@ def init_db():
             c.execute("UPDATE postavke SET v = ? WHERE k = 'sezona'", (str(g),))
         if nova_kolona:  # postojeći kompleti vrijede za tekuću sezonu
             c.execute('UPDATE kompleti SET azurirano = ?', (sezona(c),))
+        popuni_barkodove(c)
+
+
+def popuni_barkodove(c):
+    """Stavke narudžbi bez barkoda dobiju barkod knjige (ako ga je knjiga dobila kasnije), da se ista knjiga
+    na narudžbenici ne pojavi u dva reda. Isto za stavke narudžbenica (po nazivu)."""
+    c.execute("UPDATE stavke SET barkod = (SELECT k.barkod FROM knjige k WHERE k.id = stavke.knjiga_id) "
+              "WHERE COALESCE(TRIM(barkod), '') = '' AND knjiga_id IS NOT NULL AND EXISTS "
+              "(SELECT 1 FROM knjige k WHERE k.id = stavke.knjiga_id AND COALESCE(TRIM(k.barkod), '') != '')")
+    c.execute("UPDATE narudzbenice_stavke SET barkod = (SELECT k.barkod FROM knjige k WHERE UPPER(k.naziv) = "
+              "UPPER(narudzbenice_stavke.naziv) AND COALESCE(TRIM(k.barkod), '') != '' ORDER BY k.aktivna DESC LIMIT 1) "
+              "WHERE COALESCE(TRIM(barkod), '') = '' AND EXISTS (SELECT 1 FROM knjige k WHERE UPPER(k.naziv) = "
+              "UPPER(narudzbenice_stavke.naziv) AND COALESCE(TRIM(k.barkod), '') != '')")
 
 
 def sezona(c):
@@ -401,7 +414,16 @@ def api_get(c, put, q):
     if put == '/api/nepreuzeto':
         dana = int(g('dana') or postavke(c).get('podsjetnik_dana') or 7)
         granica = (datetime.date.today() - datetime.timedelta(days=dana)).isoformat()
-        return [n for n in lista_narudzbi(c, '', 'stiglo', '') if (n['stiglo_datum'] or n['datum']) <= granica]
+        return [n for n in lista_narudzbi(c, '', 'stiglo', '', razina=g('razina')) if (n['stiglo_datum'] or n['datum']) <= granica]
+    if put == '/api/narudzba/broj':  # očitan barkod s potvrde -> narudžba
+        r = c.execute('SELECT id FROM narudzbe WHERE godina = ? AND broj = ?', (int(g('godina')), int(g('broj')))).fetchone()
+        if not r:
+            raise ValueError('Narudžba br. %s/%s ne postoji.' % (g('broj'), g('godina')))
+        return {'id': r['id']}
+    if put == '/api/upozorenja':
+        return upozorenja(c)
+    if put == '/api/vulpes/prijedlozi':
+        return vulpes_prijedlozi(c)
     if put == '/api/predbiljezbe':
         st = g('status')
         l = rows(c.execute('SELECT p.*, s.naziv AS skola, k.naziv AS komplet, n.broj AS narudzba_broj FROM predbiljezbe p '
@@ -498,6 +520,7 @@ def api_post(c, put, d):
             raise ValueError('Upiši naziv knjige.')
         if d.get('id'):
             c.execute('UPDATE knjige SET ' + ', '.join(p + ' = ?' for p in polja) + ' WHERE id = ?', vr + [d['id']])
+            popuni_barkodove(c)
             return {'id': d['id']}
         return {'id': c.execute('INSERT INTO knjige(' + ', '.join(polja) + ') VALUES(' + ', '.join('?' * len(polja)) + ')',
                                 vr).lastrowid}
@@ -587,7 +610,30 @@ def api_post(c, put, d):
         if d['status'] == 'stiglo':
             c.executemany('UPDATE narudzbe SET stiglo_datum = ? WHERE id = ? AND stiglo_datum IS NULL',
                           [(datetime.date.today().isoformat(), i) for i in d['ids']])
+        if d['status'] in ('stiglo', 'preuzeto'):  # sve knjige tih narudžbi su stigle
+            c.executemany('UPDATE stavke SET stiglo = kolicina WHERE narudzba_id = ?', [(i,) for i in d['ids']])
         return {}
+    if put == '/api/narudzba/preuzeto':  # jednim klikom: preuzeto + plaćen ostatak
+        n = c.execute('SELECT * FROM narudzbe WHERE id = ?', (d['id'],)).fetchone()
+        if not n:
+            raise ValueError('Narudžba ne postoji.')
+        if d.get('naplati'):
+            iznos = c.execute('SELECT COALESCE(SUM(cijena * kolicina), 0) FROM stavke WHERE narudzba_id = ?', (n['id'],)).fetchone()[0]
+            c.execute('UPDATE narudzbe SET akontacija = ?, nacin_pl = ? WHERE id = ?',
+                      (round(iznos, 2), d.get('nacin_pl') or n['nacin_pl'] or '', n['id']))
+        c.execute("UPDATE narudzbe SET status = 'preuzeto', stiglo_datum = COALESCE(stiglo_datum, ?) WHERE id = ?",
+                  (datetime.date.today().isoformat(), n['id']))
+        c.execute('UPDATE stavke SET stiglo = kolicina WHERE narudzba_id = ?', (n['id'],))
+        return {}
+    if put == '/api/kompleti/potvrdi':  # popis isti kao lani - samo makni žutu oznaku
+        c.executemany('UPDATE kompleti SET azurirano = ? WHERE id = ?', [(sezona(c), i) for i in d['ids']])
+        return {'potvrdjeno': len(d['ids'])}
+    if put == '/api/vulpes/povezi':  # knjige bez barkoda povezane s Vulpes artiklom (barkod, šifra, cijena)
+        for p in d['parovi']:
+            c.execute('UPDATE knjige SET barkod = ?, vulpes_sifra = ?, cijena = ? WHERE id = ?',
+                      (p['barkod'], p.get('sifra'), float(p.get('cijena') or 0), p['id']))
+        popuni_barkodove(c)
+        return {'povezano': len(d['parovi'])}
     if put == '/api/nova-godina':
         nova = int(d['sezona'])
         if nova <= sezona(c):
@@ -641,6 +687,8 @@ def api_post(c, put, d):
         # preuzmi cijenu (i šifru) iz Vulpesa za odabrane knjige, po barkodu
         po_barkodu = {a['barkod']: a for a in vulpes_artikli(c) if a['barkod']}
         n = 0
+        if d.get('sve'):
+            d['ids'] = [r['knjiga']['id'] for r in vulpes_usporedba(c)['razlike']]
         for kid in d['ids']:
             k = c.execute('SELECT barkod FROM knjige WHERE id = ?', (kid,)).fetchone()
             v = k and po_barkodu.get((k['barkod'] or '').strip())
@@ -722,26 +770,33 @@ def api_post(c, put, d):
 
 
 def prijedlog_narudzbenice(c, nakladnik, razina=''):
-    """Koliko treba naručiti: naručeno od kupaca (status 'naručeno', tekuća sezona) minus već naručeno od nakladnika."""
+    """Koliko treba naručiti: što kupcima još fali (narudžbe 'naručeno', količina − stiglo) minus ono što je naručeno
+    od nakladnika, a još nije stiglo (naručeno − povrati − već raspoređeno kupcima)."""
     god = sezona(c)
     trazi = rows(c.execute(
         'SELECT ' + KLJUC.format('st.') + ' AS kljuc, MAX(st.naziv) AS naziv, MAX(st.barkod) AS barkod, '
         "COALESCE(NULLIF(TRIM(MAX(st.nakladnik)), ''), 'bez nakladnika') AS nakladnik, MAX(st.cijena) AS cijena, "
-        'SUM(st.kolicina) AS trazeno FROM stavke st JOIN narudzbe n ON n.id = st.narudzba_id '
+        'SUM(st.kolicina - COALESCE(st.stiglo, 0)) AS trazeno FROM stavke st JOIN narudzbe n ON n.id = st.narudzba_id '
         "WHERE n.godina = ? AND n.status = 'naručeno'" + (' AND n.skola_id IN (SELECT id FROM skole WHERE tip = ?)' if razina else '')
         + ' GROUP BY kljuc ORDER BY naziv', (god, razina) if razina else (god,)))
     # već naručeno: za OŠ/SŠ broje se samo narudžbenice te razine, za "sve" sve narudžbenice
     vec = {r['kljuc']: r['kolicina'] for r in c.execute(
-        'SELECT ' + KLJUC.format('s.') + ' AS kljuc, SUM(s.kolicina) AS kolicina FROM narudzbenice_stavke s '
-        "JOIN narudzbenice n ON n.id = s.narudzbenica_id WHERE n.godina = ? AND n.tip = 'narudzba'"
+        'SELECT ' + KLJUC.format('s.') + " AS kljuc, SUM(CASE WHEN n.tip = 'povrat' THEN -s.kolicina ELSE s.kolicina END) AS kolicina "
+        'FROM narudzbenice_stavke s JOIN narudzbenice n ON n.id = s.narudzbenica_id WHERE n.godina = ?'
         + (' AND n.razina = ?' if razina else '') + ' GROUP BY kljuc', (god, razina) if razina else (god,))}
+    # već stiglo i raspoređeno kupcima (to se više ne čeka od nakladnika)
+    stiglo = {r['kljuc']: r['kol'] for r in c.execute(
+        'SELECT ' + KLJUC.format('st.') + ' AS kljuc, SUM(COALESCE(st.stiglo, 0)) AS kol FROM stavke st '
+        "JOIN narudzbe n ON n.id = st.narudzba_id WHERE n.godina = ? AND n.status != 'otkazano'"
+        + (' AND n.skola_id IN (SELECT id FROM skole WHERE tip = ?)' if razina else '') + ' GROUP BY kljuc',
+        (god, razina) if razina else (god,))}
     stanje = {}
     try:
         stanje = {a['barkod']: a['stanje'] for a in vulpes_artikli(c) if a['barkod']}
     except ValueError:
         pass
     for r in trazi:
-        r['vec_naruceno'] = vec.get(r['kljuc'], 0)
+        r['vec_naruceno'] = max(0, vec.get(r['kljuc'], 0) - stiglo.get(r['kljuc'], 0))
         r['stanje_vulpes'] = stanje.get((r['barkod'] or '').strip())
         r['kolicina'] = max(0, r['trazeno'] - r['vec_naruceno'])
     if nakladnik:
@@ -840,8 +895,9 @@ def primka(c, stavke):
         redovi = c.execute(
             'SELECT st.id, st.kolicina - st.stiglo AS fali FROM stavke st JOIN narudzbe n ON n.id = st.narudzba_id '
             "WHERE n.godina = ? AND n.status = 'naručeno' AND st.stiglo < st.kolicina AND "
-            '((? != \'\' AND st.barkod = ?) OR (st.knjiga_id IS NOT NULL AND st.knjiga_id = ?) OR st.naziv = ?) '
-            'ORDER BY n.datum, n.id', (god, barkod, barkod, s.get('knjiga_id'), s.get('naziv', ''))).fetchall()
+            '((? != \'\' AND st.barkod = ?) OR (st.knjiga_id IS NOT NULL AND st.knjiga_id = ?) '
+            "OR (? = '' AND st.naziv = ?)) "  # po nazivu samo ako knjiga nema barkod (isti naslov kod dva nakladnika)
+            'ORDER BY n.datum, n.id', (god, barkod, barkod, s.get('knjiga_id'), barkod, s.get('naziv', ''))).fetchall()
         rasp = 0
         for r in redovi:
             if not ostalo:
@@ -853,7 +909,58 @@ def primka(c, stavke):
         rez.append({'naziv': s.get('naziv'), 'raspodijeljeno': rasp, 'visak': ostalo})
     kompletne = lista_narudzbi(c, god, 'naručeno', '')
     nepotpune = {r[0] for r in c.execute('SELECT DISTINCT narudzba_id FROM stavke WHERE stiglo < kolicina')}
-    return {'stavke': rez, 'kompletne': [n for n in kompletne if n['id'] not in nepotpune]}
+    kompletne = [n for n in kompletne if n['id'] not in nepotpune]
+    danas = datetime.date.today().isoformat()
+    for n in kompletne:  # kompletne narudžbe odmah postaju "stiglo" (i počinje brojanje dana za podsjetnik)
+        c.execute("UPDATE narudzbe SET status = 'stiglo', stiglo_datum = COALESCE(stiglo_datum, ?) WHERE id = ?", (danas, n['id']))
+        n['status'], n['stiglo_datum'] = 'stiglo', n['stiglo_datum'] or danas
+    return {'stavke': rez, 'kompletne': kompletne}
+
+
+def vulpes_novija_mapa(c):
+    """Ako je u Postavkama mapa godine (npr. C:\\ROBA\\2026), a postoji novija (C:\\ROBA\\2027) s artiklima - vrati je."""
+    put = vulpes_put(c)
+    if not put:
+        return None
+    mapa = os.path.dirname(put) if put.lower().endswith('.dbf') else put
+    roditelj, ime = os.path.split(os.path.normpath(mapa))
+    if not re.fullmatch(r'(19|20)\d\d', ime or ''):
+        return None
+    try:
+        imena = os.listdir(roditelj)
+    except OSError:
+        return None
+    novije = sorted((i for i in imena if re.fullmatch(r'(19|20)\d\d', i) and int(i) > int(ime)
+                     and any(f.lower() == 'artikli.dbf' for f in os.listdir(os.path.join(roditelj, i)))), reverse=True)
+    return os.path.join(roditelj, novije[0]) if novije else None
+
+
+def upozorenja(c):
+    """Što treba srediti: razlike u cijenama s Vulpesom, knjige u kompletima bez barkoda ili cijene, nova Vulpes godina."""
+    u = {'bez_barkoda': c.execute("SELECT COUNT(DISTINCT k.id) FROM knjige k JOIN komplet_knjige kk ON kk.knjiga_id = k.id "
+                                  "WHERE COALESCE(TRIM(k.barkod), '') = ''").fetchone()[0],
+         'bez_cijene': c.execute('SELECT COUNT(DISTINCT k.id) FROM knjige k JOIN komplet_knjige kk ON kk.knjiga_id = k.id '
+                                 'WHERE COALESCE(k.cijena, 0) <= 0').fetchone()[0],
+         'cijene': 0, 'vulpes_mapa': None, 'vulpes_greska': ''}
+    try:
+        u['cijene'] = len(vulpes_usporedba(c)['razlike'])
+        u['vulpes_mapa'] = vulpes_novija_mapa(c)
+    except (ValueError, OSError) as e:
+        u['vulpes_greska'] = str(e)
+    return u
+
+
+def vulpes_prijedlozi(c):
+    """Za aktivne knjige koje nisu nađene u Vulpesu predloži Vulpes artikl po nazivu."""
+    nema = vulpes_usporedba(c)['nema']
+    kand, _ = popis.kandidati([], vulpes_artikli(c))
+    out = []
+    for k in nema:
+        p = popis.predlozi({'naslov': k['naziv'], 'autori': k['autori'] or '', 'nakladnik': k['nakladnik'] or '', 'sifra': ''},
+                           kand, {})
+        if p:
+            out.append({'knjiga': k, 'prijedlozi': p[:3]})
+    return out
 
 
 def statistika(c, god):

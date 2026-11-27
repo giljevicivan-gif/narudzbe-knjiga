@@ -178,6 +178,24 @@ Narudžbe, kupci i postavke s te adrese NISU dostupni.
 Računalo i program moraju biti upaljeni da bi stranica radila (isključite spavanje
 računala u sezoni). Zaštita: najviše 5 slanja u 10 minuta s iste adrese, 300 na dan.
 
+BRŽI RAD (od verzije 2026.11.27)
+- F2 = nova narudžba, F9 = spremi i ispiši (nakon ispisa odmah se otvori prazna
+  narudžba za sljedećeg kupca), Ctrl+S = spremi.
+- Prvo upišite mobitel: ako je kupac već naručivao, ime, škola i razred se popune sami.
+- Na potvrdi (otkinuti dio listića) je barkod narudžbe. Kad kupac dođe po knjige,
+  očitajte ga u tražilici na Narudžbama i narudžba se odmah otvori. Enter u tražilici
+  otvara narudžbu i kad je pronađena samo jedna.
+- "✓ Preuzeto" (na popisu) / "✓ Preuzeto i plaćeno" (u narudžbi): jednim klikom
+  gotovina ili kartica - narudžba je preuzeta i plaćena do kraja.
+- Komplet × broj komada: za narudžbe škola upišite broj učenika kod "Dodaj označene".
+- Stiglo: na narudžbenici "📦 Stiglo je sve s ove narudžbenice" upiše cijelu pošiljku,
+  vi samo ispravite što fali i "Rasporedi". Kompletne narudžbe odmah postaju "stiglo".
+  Popis očitanih knjiga ne nestaje ako se stranica osvježi.
+- Plava traka na vrhu javlja razlike u cijenama s Vulpesom, knjige bez barkoda i novu
+  godinu u Vulpesu, s gumbom za sređivanje jednim klikom.
+- Kompleti: "✓ Popis isti kao lani" za označene komplete. Knjige: "Usporedi cijene s
+  Vulpesom" -> "Predloži Vulpes artikle po nazivu" poveže više knjiga odjednom.
+
 VIŠE RAČUNALA
 Program radi na jednom računalu. Da bi ga koristila i druga računala u mreži,
 u datoteci postavke.json stavite "mreza": true, ponovno pokrenite i na drugom
