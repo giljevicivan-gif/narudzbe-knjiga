@@ -71,7 +71,7 @@
   #ispis { display: none; }
   @page { size: A4; margin: 9mm; }
   @media print {
-    header, main, #poruka, #nadBanner { display: none !important; }
+    header, main, #poruka, #nadBanner, #upozBanner { display: none !important; }
     #ispis { display: block; font-size: 12px; }
     #ispis table { margin: 6px 0; }
     #ispis th { background: none; border-bottom: 1px solid #000; }
@@ -97,6 +97,7 @@
   <button id="zatvoriZag" onclick="zatvoriProgram()" title="Potpuno zatvara program (radi u pozadini i kad zatvorite preglednik)" style="margin-left:6px;background:#b91c1c;color:#fff;border:0;border-radius:6px;padding:5px 9px;font-weight:600;cursor:pointer;white-space:nowrap">⏻ Zatvori</button>
 </header>
 <div id="nadBanner" style="display:none;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:10px 16px;font-size:16px"></div>
+<div id="upozBanner" style="display:none;background:#eff6ff;border-bottom:2px solid #93c5fd;padding:8px 16px"></div>
 <main id="sadrzaj"></main>
 <div id="ispis"></div>
 <div id="poruka"></div>
@@ -110,7 +111,7 @@ const broj = v => parseFloat(String(v).replace(',', '.')) || 0;
 const datum = d => d ? d.split('-').reverse().join('.') + '.' : '';
 const norm = s => String(s || '').toUpperCase();
 
-const RAZINA_PUTOVI = ['/api/narudzbe', '/api/zbirno', '/api/narudzbenica/prijedlog', '/csv/narudzbe', '/csv/zbirno', '/api/platitelj', '/csv/platitelj'];
+const RAZINA_PUTOVI = ['/api/narudzbe', '/api/nepreuzeto', '/api/zbirno', '/api/narudzbenica/prijedlog', '/csv/narudzbe', '/csv/zbirno', '/api/platitelj', '/csv/platitelj'];
 const sRazinom = put => S.razina && RAZINA_PUTOVI.includes(put.split('?')[0]) ? put + (put.includes('?') ? '&' : '?') + 'razina=' + encodeURIComponent(S.razina) : put;
 async function api(put, podaci) {
   if (podaci === undefined) put = sRazinom(put);
@@ -159,9 +160,36 @@ async function provjeriNadogradnju() {
     $('#nadSad').onclick = () => nadogradi(r.dostupna.github ? { github: true } : {});
   } catch (e) { }
 }
+/* Upozorenja kod pokretanja: cijene različite od Vulpesa, knjige bez barkoda/cijene, nova Vulpes godina */
+async function prikaziUpozorenja() {
+  const danas = new Date().toLocaleDateString('sv-SE');
+  try { if (localStorage.getItem('upozorenjaSkrivena') === danas) return; } catch { }
+  let u; try { u = await (await fetch('/api/upozorenja')).json(); } catch { return; }
+  const b = $('#upozBanner'), dijelovi = [];
+  if (u.vulpes_mapa) dijelovi.push(`U Vulpesu postoji nova godina: <b>${esc(u.vulpes_mapa)}</b> <button class="mali glavni" id="uVulpes">Prebaci na nju</button>`);
+  if (u.cijene) dijelovi.push(`<b>${u.cijene}</b> knjiga ima drugačiju cijenu u Vulpesu <button class="mali glavni" id="uCijene">Preuzmi sve cijene iz Vulpesa</button> <button class="mali" id="uPogledaj">Pogledaj</button>`);
+  if (u.bez_barkoda) dijelovi.push(`<b>${u.bez_barkoda}</b> knjiga u kompletima nema barkod <button class="mali" id="uBarkod">Poveži s Vulpesom</button>`);
+  if (u.bez_cijene) dijelovi.push(`<b>${u.bez_cijene}</b> knjiga u kompletima nema cijenu`);
+  if (!dijelovi.length) { b.style.display = 'none'; return; }
+  b.innerHTML = `<div style="display:flex;gap:6px 18px;flex-wrap:wrap;align-items:center">ℹ️ ${dijelovi.join('<span class="siv">·</span>')}
+    <button class="mali" id="uSakrij" style="margin-left:auto">Sakrij do sutra</button></div>`;
+  b.style.display = 'block';
+  $('#uSakrij').onclick = () => { try { localStorage.setItem('upozorenjaSkrivena', danas); } catch { } b.style.display = 'none'; };
+  if ($('#uVulpes')) $('#uVulpes').onclick = async () => {
+    S.postavke = await api('/api/postavke', { vulpes_artikli: u.vulpes_mapa }); poruka('Vulpes mapa promijenjena.'); prikaziUpozorenja();
+  };
+  if ($('#uCijene')) $('#uCijene').onclick = async () => {
+    if (!confirm(`Preuzeti nove cijene iz Vulpesa za ${u.cijene} knjiga?`)) return;
+    const r = await api('/api/vulpes/preuzmi', { sve: true, ids: [] });
+    S.knjige = await api('/api/knjige'); poruka('Ažurirano ' + r.azurirano + ' cijena.'); prikaziUpozorenja();
+  };
+  if ($('#uPogledaj')) $('#uPogledaj').onclick = () => { location.hash = '#knjige'; setTimeout(usporedbaVulpes, 50); };
+  if ($('#uBarkod')) $('#uBarkod').onclick = () => { location.hash = '#knjige'; setTimeout(() => usporedbaVulpes(true), 50); };
+}
 async function ucitajOsnovno() {
   Object.assign(S, await api('/api/init'));
   provjeriNadogradnju();
+  if (!S.upozorenjaProvjerena) { S.upozorenjaProvjerena = true; prikaziUpozorenja(); }
   osvjeziBrojPred();
   $('#verzijaZag').textContent = 'v' + S.verzija;
   S.knjige = await api('/api/knjige');
@@ -307,6 +335,17 @@ function ean13(kod, visina = 30) {
     <text x="${56.5 * m}" y="${visina + 10}" font-size="10" text-anchor="middle" font-family="monospace">${kod}</text></svg>`;
 }
 
+/* Barkod narudžbe na potvrdi: 29 + godina + broj (6 znamenki) + kontrolna znamenka. Očita se u tražilici narudžbi. */
+function kodNarudzbe(n) {
+  const k = '29' + String(n.godina).slice(-4) + String(n.broj).padStart(6, '0');
+  const z = [...k].reduce((a, c, i) => a + (+c) * (i % 2 ? 3 : 1), 0);
+  return k + (10 - z % 10) % 10;
+}
+function izKodaNarudzbe(q) {
+  const m = /^29(\d{4})(\d{6})\d$/.exec(String(q).trim());
+  return m && kodNarudzbe({ godina: m[1], broj: +m[2] }) === String(q).trim() ? { godina: +m[1], broj: +m[2] } : null;
+}
+
 /* ------------------------------------------------ Obrazac za narudžbu (prazan, za ispunjavanje rukom) */
 async function ispisObrazaca(ids) {
   if (!ids.length) return poruka('Označi komplete kvačicom (ili gornjom kvačicom sve).', true);
@@ -353,7 +392,7 @@ async function stranicaNarudzbe() {
   $('#sadrzaj').innerHTML = `
     <h2>Narudžbe</h2>
     <div class="traka">
-      <input id="trazi" placeholder="Traži kupca, telefon ili broj…" value="${esc(f.tekst || '')}" style="min-width:260px">
+      <input id="trazi" placeholder="Traži kupca, telefon, broj ili očitaj potvrdu…" value="${esc(f.tekst || '')}" style="min-width:280px" title="Očitajte barkod s potvrde kupca ili upišite pa Enter – ako je samo jedna narudžba, odmah se otvori">
       <select id="fGod">${godinaOpcije(f.godina)}</select>
       <select id="fStatus">${statusOpcije(f.status, 'svi statusi')}</select>
       <select id="fSkola">${skolaOpcije(f.skola, 'sve škole')}</select>
@@ -377,19 +416,34 @@ async function stranicaNarudzbe() {
     <tbody id="redovi"></tbody></table>`;
   const crtaj = () => {
     const t = norm(f.tekst), rijeci = t.split(/\s+/).filter(Boolean);
-    const vidljive = sve.filter(n => rijeci.every(w => norm(`${n.broj} ${n.kupac} ${n.telefon}`).includes(w)));
+    // telefon se traži bez razmaka i crtica (091 234 5678 = 0912345678)
+    const vidljive = izKodaNarudzbe(t) ? [] : sve.filter(n => rijeci.every(w => norm(`${n.broj} ${n.kupac} ${n.telefon}`).includes(w)
+      || (/^\d{3,}$/.test(w) && String(n.telefon || '').replace(/\D/g, '').includes(w))));
     S.vidljiveNarudzbe = vidljive;
-    $('#redovi').innerHTML = vidljive.map(n => `<tr class="klik" data-id="${n.id}">
+    const MAX = 300;
+    $('#redovi').innerHTML = vidljive.slice(0, MAX).map(n => `<tr class="klik" data-id="${n.id}">
       <td onclick="event.stopPropagation()"><input type="checkbox" class="oznaka" value="${n.id}"></td>
       <td>${n.broj}</td><td>${datum(n.datum)}</td><td>${esc(n.kupac)}${n.platitelj ? `<span class="znacka">${esc(n.platitelj)}</span>` : ''}</td><td>${esc(n.telefon)}</td><td>${esc(n.skola || '')}</td><td>${esc(n.razred)}</td>
       <td class="br">${n.komada}</td><td class="br">${kn(n.iznos)}</td><td class="br">${kn(n.akontacija)}</td><td class="br">${kn(n.iznos - n.akontacija)}</td>
       <td><span class="status ${n.status}">${n.status}</span>${cekaDana(n) >= +S.postavke.podsjetnik_dana ? `<span class="znacka crvena" title="Stiglo ${datum(n.stiglo_datum)}">⏰ ${cekaDana(n)} d</span>` : ''}</td>
-      <td onclick="event.stopPropagation()">${gumbiObavijesti(n, n.iznos - n.akontacija)}</td></tr>`).join('');
+      <td onclick="event.stopPropagation()" style="white-space:nowrap">${gumbiObavijesti(n, n.iznos - n.akontacija)}${['naručeno', 'stiglo'].includes(n.status) ? ` <button class="mali" data-preuzmi="${n.id}" title="Kupac preuzima knjige – jednim klikom preuzeto i plaćeno">✓ Preuzeto</button>` : ''}</td></tr>`).join('')
+      + (vidljive.length > MAX ? `<tr><td colspan="13" class="siv">… još ${vidljive.length - MAX} narudžbi – suzi pretragu ili filter</td></tr>` : '');
     const uk = vidljive.filter(n => n.status !== 'otkazano').reduce((a, n) => a + n.iznos, 0);
     $('#info').textContent = `${vidljive.length} narudžbi · ukupno ${kn(uk)}`;
   };
   crtaj();
-  $('#trazi').oninput = e => { f.tekst = e.target.value; crtaj(); };
+  let tCrtaj;
+  $('#trazi').oninput = e => { f.tekst = e.target.value; clearTimeout(tCrtaj); tCrtaj = setTimeout(crtaj, sve.length > 500 ? 150 : 0); };
+  $('#trazi').onkeydown = async e => {
+    if (e.key !== 'Enter') return;
+    clearTimeout(tCrtaj); f.tekst = e.target.value; crtaj();
+    const kod = izKodaNarudzbe(f.tekst);
+    if (kod) {  // očitana potvrda kupca
+      const { id } = await api(`/api/narudzba/broj?godina=${kod.godina}&broj=${kod.broj}`);
+      f.tekst = ''; location.hash = '#narudzba/' + id; return;
+    }
+    if (S.vidljiveNarudzbe.length === 1) location.hash = '#narudzba/' + S.vidljiveNarudzbe[0].id;
+  };
   $('#trazi').focus();
   $('#fGod').onchange = e => { f.godina = e.target.value; stranicaNarudzbe(); };
   $('#fStatus').onchange = e => { f.status = e.target.value; stranicaNarudzbe(); };
@@ -398,7 +452,40 @@ async function stranicaNarudzbe() {
   if ($('#popisPlat')) $('#popisPlat').onclick = () => ispisPlatitelja(f, q);
   $('#fNepr').onchange = e => { f.nepreuzeto = e.target.checked; stranicaNarudzbe(); };
   $('#sve').onchange = e => document.querySelectorAll('.oznaka').forEach(c => c.checked = e.target.checked);
-  $('#redovi').onclick = e => { const tr = e.target.closest('tr'); if (tr) location.hash = '#narudzba/' + tr.dataset.id; };
+  $('#redovi').onclick = async e => {
+    const b = e.target.closest('[data-preuzmi]');
+    if (b) { e.stopPropagation(); const n = sve.find(x => x.id == b.dataset.preuzmi); if (await preuzmiNarudzbu(n, n.iznos)) stranicaNarudzbe(); return; }
+    const tr = e.target.closest('tr[data-id]'); if (tr) location.hash = '#narudzba/' + tr.dataset.id;
+  };
+}
+/* Kupac preuzima knjige: jednim klikom status "preuzeto" i plaćen ostatak (gotovina/kartica) */
+function preuzmiNarudzbu(n, iznos) {
+  return new Promise(gotovo => {
+    const ost = Math.round((iznos - (n.akontacija || 0)) * 100) / 100, o = document.createElement('div');
+    o.className = 'modal';
+    const plat = n.platitelj ? `<button id="pBez" class="${ost > 0 ? 'glavni' : ''}">Preuzeto – plaća ${esc(n.platitelj)} (bez naplate)</button>` : '';
+    o.innerHTML = `<div class="modal-okvir" style="height:auto;width:min(520px,95vw)">
+      <h3 style="margin:0 0 6px">Preuzimanje – narudžba br. ${n.broj}</h3>
+      <p style="margin:0 0 4px">${esc(n.kupac)}</p>
+      <p style="font-size:20px;margin:6px 0 14px">Za platiti: <b>${kn(Math.max(0, ost))}</b></p>
+      <div class="traka">${ost > 0 ? `<button class="glavni" id="pGot">💶 Plaćeno gotovinom</button><button class="glavni" id="pKar">💳 Plaćeno karticom</button>` : `<button class="glavni" id="pBez">✓ Preuzeto (sve plaćeno)</button>`}
+        ${ost > 0 ? plat : ''}<button id="pOdustani">Odustani</button></div>
+      <p class="siv" style="margin:8px 0 0">Narudžba se označi kao preuzeta${ost > 0 ? ', a uplaćeno postane cijeli iznos' : ''}.</p></div>`;
+    document.body.appendChild(o);
+    const kraj = async (naplati, nacin) => {
+      if (naplati !== null) {
+        await api('/api/narudzba/preuzeto', { id: n.id, naplati, nacin_pl: nacin });
+        poruka(`Narudžba ${n.broj} preuzeta.`);
+      }
+      o.remove(); document.removeEventListener('keydown', tipke); gotovo(naplati !== null);
+    };
+    const tipke = e => { if (e.key === 'Escape') kraj(null); };
+    document.addEventListener('keydown', tipke);
+    if ($('#pGot', o)) { $('#pGot', o).onclick = () => kraj(true, 'Gotovina'); $('#pKar', o).onclick = () => kraj(true, 'Kartica'); $('#pGot', o).focus(); }
+    if ($('#pBez', o)) { $('#pBez', o).onclick = () => kraj(false); if (!$('#pGot', o)) $('#pBez', o).focus(); }
+    $('#pOdustani', o).onclick = () => kraj(null);
+    o.onclick = e => { if (e.target === o) kraj(null); };
+  });
 }
 const oznacene = () => [...document.querySelectorAll('.oznaka:checked')].map(c => +c.value);
 async function promijeniStatus() {
@@ -436,7 +523,8 @@ async function ispisListica(ids = oznacene()) {
       <div class="odrezak"><span>✂</span>
         <div style="display:flex;justify-content:space-between;gap:12px"><div style="display:flow-root;flex:1;min-width:0"><img src="/logo.png" class="logo mali" alt="" onerror="this.remove()"><b>${esc(p.firma)}</b> · tel. ${esc(p.telefon)}<br>
           <b>POTVRDA O NARUDŽBI br. ${n.broj}/${n.godina}</b> · ${datum(n.datum)}<br>${esc(n.kupac)} · ${esc(n.skola || '')} ${esc(n.razred)}. r.</div>
-          <div style="text-align:right">Knjiga: ${n.stavke.reduce((a, s) => a + s.kolicina, 0)} · ukupno ${kn(uk)}<br>Akontacija: <b>${kn(n.akontacija)}</b><br><b>Za platiti: ${kn(ost)}</b></div></div>
+          <div style="text-align:right">Knjiga: ${n.stavke.reduce((a, s) => a + s.kolicina, 0)} · ukupno ${kn(uk)}<br>Akontacija: <b>${kn(n.akontacija)}</b><br><b>Za platiti: ${kn(ost)}</b></div>
+          <div>${ean13(kodNarudzbe(n), 24)}</div></div>
         <div class="siv">Javit ćemo Vam se kad knjige stignu. Ponesite ovu potvrdu.</div></div>
     </div>`;
   }).join('');
@@ -455,8 +543,8 @@ async function stranicaNarudzba(id) {
   $('#sadrzaj').innerHTML = `
     <h2>${id ? `Narudžba br. ${n.broj}/${n.godina} <span class="siv">${datum(n.datum)}</span>` : 'Nova narudžba'}</h2>
     <div class="polja">
+      <label>Telefon (mobitel)<input id="telefon" value="${esc(n.telefon)}" placeholder="upiši broj – stari kupci se popune sami"><span id="kupacPrijedlog"></span></label>
       <label>Kupac (ime i prezime)<input id="kupac" value="${esc(n.kupac)}"></label>
-      <label>Telefon<input id="telefon" value="${esc(n.telefon)}"><span id="kupacPrijedlog"></span></label>
       <label>Škola<select id="skola">${skolaOpcije(n.skola_id)}<option value="+">+ nova škola…</option></select></label>
       <label>Razred<select id="razred">${['', '1', '2', '3', '4', '5', '6', '7', '8'].map(r => `<option ${r == n.razred ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
     </div>
@@ -479,28 +567,45 @@ async function stranicaNarudzba(id) {
       <label class="sirok">Napomena<textarea id="napomena">${esc(n.napomena)}</textarea></label>
     </div>
     <div class="traka">
-      <button class="glavni" onclick="spremiNarudzbu()">Spremi</button>
-      <button class="glavni" onclick="spremiNarudzbu(true)">Spremi i ispiši</button>
+      <button class="glavni" onclick="spremiNarudzbu()" title="Prečac: Ctrl+S">Spremi</button>
+      <button class="glavni" onclick="spremiNarudzbu(true)" title="Prečac: F9">Spremi i ispiši (F9)</button>
+      ${id && ['naručeno', 'stiglo'].includes(n.status) ? '<button class="glavni" id="nPreuzmi" style="background:var(--zelena);border-color:var(--zelena)">✓ Preuzeto i plaćeno</button>' : ''}
       <button onclick="history.back()">Odustani</button>
+      <span class="siv">F2 = nova narudžba</span>
       ${id ? `<span id="obavijest"></span>` : ''}
       ${id ? '<div class="desno"><button class="opasno" onclick="obrisiNarudzbu()">Obriši narudžbu</button></div>' : ''}
     </div>`;
   S.n = n;
   api('/api/rabljene?status=' + encodeURIComponent('na stanju')).then(r => { S.rabljeneStanje = r; if ($('#stavke')) crtajStavke(); });
-  $('#telefon').onblur = async () => {
-    if (id || $('#kupac').value.trim() && $('#skola').value) return;
+  // stari kupac po broju mobitela: ako je jedan, popuni se sam; ako ih je više, ponude se za klik
+  let zadnjiTel = '', tTel;
+  const primijeniKupca = r => {
+    if (!$('#kupac').value.trim()) $('#kupac').value = r.kupac;
+    if (r.skola_id && !$('#skola').value) $('#skola').value = r.skola_id;
+    // novi razred: ako je kupio prošle godine, sad je razred više
+    const raz = +r.razred ? String(+r.razred + (r.godina < S.sezona ? S.sezona - r.godina : 0)) : r.razred;
+    if (!$('#razred').value && [...$('#razred').options].some(o => o.value === raz)) $('#razred').value = raz;
+    osvjeziKomplete();
+  };
+  const traziKupca = async () => {
+    const tel = $('#telefon').value.replace(/\D/g, '');
+    if (id || tel.length < 6 || tel === zadnjiTel || ($('#kupac').value.trim() && $('#skola').value)) return;
+    zadnjiTel = tel;
     const l = await api('/api/kupac?telefon=' + encodeURIComponent($('#telefon').value));
+    const isti = l.length && l.every(r => r.kupac === l[0].kupac && r.skola_id === l[0].skola_id);
+    if (isti) {
+      primijeniKupca(l[0]);
+      $('#kupacPrijedlog').innerHTML = `<span class="siv">↳ popunjeno prema narudžbi iz ${l[0].godina}.</span>`;
+      return;
+    }
     $('#kupacPrijedlog').innerHTML = l.map((r, i) => `<a class="mali" href="#" data-i="${i}">↳ ${esc(r.kupac)} · ${esc(r.skola || '')} ${esc(r.razred)}. r. (${r.godina})</a>`).join(' ');
     $('#kupacPrijedlog').onclick = e => {
       const r = l[e.target.dataset.i]; if (!r) return; e.preventDefault();
-      if (!$('#kupac').value.trim()) $('#kupac').value = r.kupac;
-      if (r.skola_id) $('#skola').value = r.skola_id;
-      // novi razred: ako je kupio prošle godine, sad je razred više
-      const raz = +r.razred ? String(+r.razred + (r.godina < S.sezona ? S.sezona - r.godina : 0)) : r.razred;
-      if ([...$('#razred').options].some(o => o.value === raz)) $('#razred').value = raz;
-      $('#kupacPrijedlog').innerHTML = ''; osvjeziKomplete();
+      primijeniKupca(r); $('#kupacPrijedlog').innerHTML = '';
     };
   };
+  $('#telefon').onblur = traziKupca;
+  $('#telefon').addEventListener('input', () => { clearTimeout(tTel); if ($('#telefon').value.replace(/\D/g, '').length >= 9) tTel = setTimeout(traziKupca, 400); });
   const osvjeziKomplete = () => {
     const sk = $('#skola').value, raz = $('#razred').value;
     const ks = S.kompleti.filter(k => (!sk || k.skola_id == sk) && (!raz || k.razred == raz));
@@ -519,11 +624,14 @@ async function stranicaNarudzba(id) {
       <label style="margin-left:10px"><input type="checkbox" id="kSve" checked> sve</label>
       <table style="margin-top:4px"><tbody>${knj.map(b => `<tr><td style="width:24px"><input type="checkbox" class="kKnj" value="${b.id}" ${ima(b.id) ? 'disabled' : 'checked'}></td>
         <td>${esc(b.naziv)}${ima(b.id) ? ' <span class="siv">(već dodano)</span>' : ''}</td><td>${esc(b.vrsta)}</td><td>${esc(b.nakladnik)}</td><td class="br">${kn(b.cijena)}</td></tr>`).join('')}</tbody></table>
-      <div class="traka" style="margin-top:6px"><button class="glavni" id="kDodaj">Dodaj označene</button><button id="kOdustani">Zatvori</button></div></div>`;
+      <div class="traka" style="margin-top:6px"><button class="glavni" id="kDodaj">Dodaj označene</button>
+        <label title="Za narudžbu škole: upiši broj učenika i svaka knjiga se doda toliko puta">× <input type="number" id="kPuta" value="1" min="1" style="width:70px"> komada</label>
+        <button id="kOdustani">Zatvori</button></div></div>`;
     $('#kSve').onchange = e => document.querySelectorAll('.kKnj:not(:disabled)').forEach(c => c.checked = e.target.checked);
     $('#kOdustani').onclick = () => { $('#kKnjige').innerHTML = ''; $('#komplet').value = ''; };
     $('#kDodaj').onclick = () => {
-      document.querySelectorAll('.kKnj:checked:not(:disabled)').forEach(c => dodajStavku(knjigaPoId(+c.value)));
+      const puta = Math.max(1, parseInt($('#kPuta').value) || 1);
+      document.querySelectorAll('.kKnj:checked:not(:disabled)').forEach(c => dodajStavku(knjigaPoId(+c.value), puta));
       $('#kKnjige').innerHTML = ''; $('#komplet').value = '';
     };
   };
@@ -540,13 +648,20 @@ async function stranicaNarudzba(id) {
   $('#akontacija').oninput = crtajStavke;
   if (id) $('#obavijest').innerHTML = 'Obavijesti kupca: ' + gumbiObavijesti(n, n.stavke.reduce((a, s) => a + s.cijena * s.kolicina, 0) - n.akontacija);
   trazilica($('#traziKnjigu'), $('#prijedlozi'), async r => dodajStavku(await uKatalog(r)));
+  if ($('#nPreuzmi')) $('#nPreuzmi').onclick = async () => {
+    if (S.nespremljeno && !(await spremiNarudzbu(false, true))) return;
+    const uk = S.n.stavke.reduce((a, s) => a + s.cijena * s.kolicina, 0);
+    if (await preuzmiNarudzbu({ ...n, akontacija: broj($('#akontacija').value), platitelj: $('#platitelj').value }, uk)) location.hash = '#narudzbe';
+  };
   crtajStavke();
-  $('#kupac').focus();
+  $('#sadrzaj').oninput = $('#sadrzaj').onchange = () => { S.nespremljeno = true; };
+  (id ? $('#kupac') : $('#telefon')).focus();
 }
-function dodajStavku(k) {
+function dodajStavku(k, puta = 1) {
   const postoji = S.n.stavke.find(s => s.knjiga_id && s.knjiga_id === k.id);
-  if (postoji) postoji.kolicina++;
-  else S.n.stavke.push({ knjiga_id: k.id, naziv: k.naziv, barkod: k.barkod, nakladnik: k.nakladnik, cijena: k.cijena, kolicina: 1 });
+  if (postoji) postoji.kolicina += puta;
+  else S.n.stavke.push({ knjiga_id: k.id, naziv: k.naziv, barkod: k.barkod, nakladnik: k.nakladnik, cijena: k.cijena, kolicina: puta });
+  S.nespremljeno = true;
   crtajStavke();
 }
 function crtajStavke() {
@@ -564,20 +679,37 @@ function crtajStavke() {
   $('#ukupno').textContent = kn(uk);
   $('#ostatak').textContent = kn(uk - broj($('#akontacija').value));
 }
-async function spremiNarudzbu(ispisi) {
-  const sk = $('#skola').value;
-  const d = { ...S.n, kupac: $('#kupac').value, telefon: $('#telefon').value, skola_id: sk && sk !== '+' ? +sk : null,
-    razred: $('#razred').value, akontacija: broj($('#akontacija').value), nacin_pl: $('#nacin_pl').value,
-    status: $('#status').value, napomena: $('#napomena').value, platitelj: $('#platitelj').value };
-  const { id } = await api('/api/narudzba', d);
-  poruka('Narudžba spremljena.');
-  ({ godine: S.godine, platitelji: S.platitelji } = await api('/api/init'));
-  if (ispisi) await ispisListica([id]);
-  location.hash = '#narudzbe';
+async function spremiNarudzbu(ispisi, ostani) {
+  if (S.spremam || !$('#akontacija')) return;  // dvostruki klik ne smije napraviti dvije narudžbe
+  S.spremam = true;
+  document.querySelectorAll('#sadrzaj button').forEach(b => b.disabled = true);
+  try {
+    const sk = $('#skola').value;
+    const d = { ...S.n, kupac: $('#kupac').value, telefon: $('#telefon').value, skola_id: sk && sk !== '+' ? +sk : null,
+      razred: $('#razred').value, akontacija: broj($('#akontacija').value), nacin_pl: $('#nacin_pl').value,
+      status: $('#status').value, napomena: $('#napomena').value, platitelj: $('#platitelj').value };
+    const { id } = await api('/api/narudzba', d);
+    S.n.id = id; S.nespremljeno = false;
+    poruka('Narudžba spremljena.');
+    ({ godine: S.godine, platitelji: S.platitelji } = await api('/api/init'));
+    if (ispisi) await ispisListica([id]);
+    if (ostani) return id;
+    if (ispisi && !d.id) {  // nova narudžba ispisana -> odmah prazna za sljedećeg kupca
+      poruka('Narudžba spremljena – upiši sljedećeg kupca.');
+      if (location.hash === '#nova') ruta(); else location.hash = '#nova';
+    } else location.hash = '#narudzbe';
+    return id;
+  } catch (e) {
+    return null;
+  } finally {
+    S.spremam = false;
+    document.querySelectorAll('#sadrzaj button').forEach(b => b.disabled = false);
+  }
 }
 async function obrisiNarudzbu() {
   if (!confirm('Sigurno obrisati ovu narudžbu?')) return;
   await api('/api/narudzba/obrisi', { id: S.n.id });
+  S.nespremljeno = false;
   poruka('Narudžba obrisana.');
   location.hash = '#narudzbe';
 }
@@ -614,6 +746,7 @@ function stranicaKompleti() {
     <h2>Kompleti</h2>
     <div class="traka"><select id="kSkola">${skolaOpcije(S.kf, 'sve škole')}</select>
       <button id="kObrasci" title="Prazni obrasci za narudžbu (roditelj, mobitel, akontacija, kvačice za knjige)">🖨 Ispiši obrasce za označene</button>
+      <button id="kPotvrdi" title="Za označene komplete potvrdi da je popis knjiga isti kao prošle godine (makne žutu oznaku)">✓ Popis isti kao lani (označeni)</button>
       <div class="desno"><button class="glavni" onclick="location.hash='#ucitaj-popis'">📄 Učitaj popis škole (PDF/Word/Excel)</button><button onclick="$('#uvozOkvir').style.display=''">Uvoz iz predloška</button><button class="glavni" onclick="urediKomplet()">+ Novi komplet</button></div></div>
     <div class="okvir" id="uvozOkvir" style="display:none">
       <b>Uvoz popisa knjiga po školama</b>
@@ -635,6 +768,12 @@ function stranicaKompleti() {
   $('#kSkola').onchange = e => { S.kf = e.target.value; crtaj(); };
   $('#sve').onchange = e => document.querySelectorAll('.oznaka').forEach(c => c.checked = e.target.checked);
   $('#kObrasci').onclick = () => ispisObrazaca(oznacene());
+  $('#kPotvrdi').onclick = async () => {
+    const ids = oznacene();
+    if (!ids.length) return poruka('Označi komplete kvačicom (ili gornjom kvačicom sve).', true);
+    await api('/api/kompleti/potvrdi', { ids });
+    await ucitajOsnovno(); poruka(`Potvrđeno ${ids.length} kompleta za sezonu ${S.sezona}.`); stranicaKompleti();
+  };
   $('#uvozi').onclick = async () => {
     const f = $('#uvozDatoteka').files[0];
     if (!f) return poruka('Odaberi datoteku.', true);
@@ -861,7 +1000,7 @@ function urediKnjigu(id) {
     S.knjige = await api('/api/knjige'); poruka('Knjiga spremljena.'); stranicaKnjige();
   };
 }
-async function usporedbaVulpes() {
+async function usporedbaVulpes(prijedlozi) {
   $('#sadrzaj').innerHTML = '<h2>Usporedba s Vulpesom</h2><p>Čitam Vulpes…</p>';
   let u;
   try { u = await api('/api/vulpes/usporedba'); } catch (e) { $('#sadrzaj').innerHTML += `<p>${esc(e.message)}</p><p><a href="#postavke">Otvori postavke</a></p>`; return; }
@@ -873,13 +1012,41 @@ async function usporedbaVulpes() {
     ${u.razlike.map(r => `<tr><td><input type="checkbox" class="oznaka" value="${r.knjiga.id}" checked></td><td>${esc(r.knjiga.naziv)}</td><td>${esc(r.vulpes.naziv)}</td>
       <td class="br">${kn(r.knjiga.cijena)}</td><td class="br"><b>${kn(r.vulpes.cijena)}</b></td></tr>`).join('')}</tbody></table>
     <h3 style="margin-top:24px">Nije pronađeno u Vulpesu (${u.nema.length})</h3>
-    <p class="siv">Klikni knjigu pa je u dijelu "Poveži s Vulpesom" pronađi po nazivu. Ako se više ne koristi, postavi je kao neaktivnu.</p>
+    <p class="siv">Klikni knjigu pa je u dijelu "Poveži s Vulpesom" pronađi po nazivu. Ako se više ne koristi, postavi je kao neaktivnu.
+      Ili neka program sam predloži artikle za sve odjednom:</p>
+    ${u.nema.length ? '<div class="traka"><button class="glavni" id="vPredlozi">🔍 Predloži Vulpes artikle po nazivu za sve</button></div><div id="vPrijedlozi"></div>' : ''}
     <table><tbody>${u.nema.map(k => `<tr class="klik" onclick="urediKnjigu(${k.id})"><td>${esc(k.naziv)}</td><td>${esc(k.nakladnik)}</td><td>${esc(k.barkod) || '<span class="siv">nema barkoda</span>'}</td><td class="br">${kn(k.cijena)}</td></tr>`).join('')}</tbody></table>`;
   $('#sve').onchange = e => document.querySelectorAll('.oznaka').forEach(c => c.checked = e.target.checked);
   $('#preuzmi').onclick = async () => {
-    const { azurirano } = await api('/api/vulpes/preuzmi', { ids: oznacene() });
+    const ids = [...document.querySelectorAll('.oznaka:checked')].map(c => +c.value);
+    const { azurirano } = await api('/api/vulpes/preuzmi', { ids });
     S.knjige = await api('/api/knjige'); poruka('Ažurirano ' + azurirano + ' knjiga.'); usporedbaVulpes();
   };
+  const predlozi = async () => {
+    $('#vPrijedlozi').innerHTML = '<p>Tražim po nazivima, pričekaj…</p>';
+    const l = await api('/api/vulpes/prijedlozi');
+    if (!l.length) { $('#vPrijedlozi').innerHTML = '<p class="siv">Za te knjige nisam našao slične artikle u Vulpesu.</p>'; return; }
+    $('#vPrijedlozi').innerHTML = `<div class="okvir"><b>Prijedlozi iz Vulpesa (${l.length})</b>
+      <span class="siv">– kvačicom su označeni sigurni prijedlozi. Provjeri, promijeni ako treba i klikni "Poveži označene" (preuzima se barkod, šifra i cijena iz Vulpesa).</span>
+      <table style="margin-top:6px"><thead><tr><th></th><th>Naša knjiga</th><th>Artikl u Vulpesu</th></tr></thead><tbody>
+      ${l.map((r, i) => `<tr><td><input type="checkbox" class="vPar" data-i="${i}" ${!r.knjiga.barkod && r.prijedlozi[0].ocjena >= 0.85 ? 'checked' : ''}></td>
+        <td>${esc(r.knjiga.naziv)}<br><span class="siv">${esc(r.knjiga.nakladnik)} ${r.knjiga.barkod ? '· barkod ' + esc(r.knjiga.barkod) : '· nema barkoda'}</span></td>
+        <td><select data-i="${i}" style="max-width:520px">${r.prijedlozi.map((p, j) => `<option value="${j}">${esc(p.naziv)} · ${esc(p.barkod)} · ${kn(p.cijena)} (${Math.round(p.ocjena * 100)}%)</option>`).join('')}</select></td></tr>`).join('')}
+      </tbody></table><div class="traka" style="margin-top:6px"><button class="glavni" id="vPovezi">Poveži označene</button></div></div>`;
+    $('#vPovezi').onclick = async () => {
+      const parovi = [...document.querySelectorAll('.vPar:checked')].map(c => {
+        const r = l[+c.dataset.i], p = r.prijedlozi[+$(`select[data-i="${c.dataset.i}"]`).value];
+        return { id: r.knjiga.id, barkod: p.barkod, sifra: p.sifra, cijena: p.cijena };
+      });
+      if (!parovi.length) return poruka('Označi barem jednu knjigu.', true);
+      const r = await api('/api/vulpes/povezi', { parovi });
+      S.knjige = await api('/api/knjige'); poruka(`Povezano ${r.povezano} knjiga s Vulpesom.`); usporedbaVulpes();
+    };
+  };
+  if ($('#vPredlozi')) {
+    $('#vPredlozi').onclick = predlozi;
+    if (prijedlozi === true) { $('#vPredlozi').scrollIntoView(); predlozi(); }
+  }
 }
 
 /* ------------------------------------------------ Obavijest kupcu (WhatsApp / SMS) */
@@ -950,21 +1117,25 @@ async function ispisPlatitelja(f, q) {
 }
 
 /* ------------------------------------------------ Stiglo (primka po knjigama) */
+function spremiPrimku() { try { localStorage.setItem('primka', JSON.stringify(S.primka || [])); } catch { } }
 function stranicaStiglo() {
-  S.primka = S.primka || [];
+  if (!S.primka) { try { S.primka = JSON.parse(localStorage.getItem('primka') || '[]'); } catch { S.primka = []; } }
   $('#sadrzaj').innerHTML = `
     <h2>Stiglo od nakladnika</h2>
     <p class="siv">Očitaj barkodove knjiga iz pošiljke (ili potraži po nazivu). Program ih rasporedi na narudžbe kupaca, najstarije prve,
       i pokaže koje su narudžbe sad kompletne.</p>
     <div class="okvir"><input id="pTrazi" placeholder="Očitaj barkod ili upiši naziv pa Enter…" style="width:100%"><div class="prijedlozi" id="pPrijedlozi"></div></div>
+    <p class="siv">Za cijelu pošiljku odjednom: otvori narudžbenicu u Nakladnicima i klikni "📦 Stiglo je sve s ove narudžbenice" – ovdje samo ispraviš ono što fali.</p>
     <table><thead><tr><th>Naziv</th><th>Barkod</th><th class="br">Komada</th><th></th></tr></thead><tbody id="pStavke"></tbody></table>
     <div class="traka" style="margin-top:12px"><button class="glavni" id="pRasporedi">Rasporedi na narudžbe</button><button id="pOcisti">Očisti popis</button></div>
     <div id="pRez"></div>`;
   const crtaj = () => {
     $('#pStavke').innerHTML = S.primka.map((s, i) => `<tr><td>${esc(s.naziv)}</td><td>${esc(s.barkod)}</td>
-      <td class="br"><input type="number" min="1" value="${s.kolicina}" style="width:70px" onchange="S.primka[${i}].kolicina=+this.value||1"></td>
-      <td><button class="mali opasno" onclick="S.primka.splice(${i},1);stranicaStiglo()">✕</button></td></tr>`).join('')
+      <td class="br"><input type="number" min="0" value="${s.kolicina}" style="width:70px" onchange="S.primka[${i}].kolicina=Math.max(0,+this.value||0);spremiPrimku()"></td>
+      <td><button class="mali opasno" onclick="S.primka.splice(${i},1);spremiPrimku();stranicaStiglo()">✕</button></td></tr>`).join('')
+      + (S.primka.length ? `<tr><td colspan="2" class="siv">${S.primka.length} naslova</td><td class="br"><b>${S.primka.reduce((a, s) => a + s.kolicina, 0)}</b></td><td></td></tr>` : '')
       || '<tr><td colspan="4" class="siv">Još ništa nije očitano.</td></tr>';
+    spremiPrimku();
   };
   trazilica($('#pTrazi'), $('#pPrijedlozi'), r => {
     const kljuc = r.barkod || r.naziv, post = S.primka.find(s => (s.barkod || s.naziv) === kljuc);
@@ -976,23 +1147,20 @@ function stranicaStiglo() {
   $('#pOcisti').onclick = () => { S.primka = []; stranicaStiglo(); };
   $('#pRasporedi').onclick = async () => {
     if (!S.primka.length) return poruka('Očitaj barem jednu knjigu.', true);
-    const r = await api('/api/primka', { stavke: S.primka });
+    const r = await api('/api/primka', { stavke: S.primka.filter(s => s.kolicina > 0) });
     S.primka = []; crtaj();
     const visak = r.stavke.filter(s => s.visak);
     $('#pRez').innerHTML = `
       <div class="okvir"><b>Raspoređeno:</b> ${r.stavke.reduce((a, s) => a + s.raspodijeljeno, 0)} kom.
         ${visak.length ? `<br><span class="siv">Nije bilo narudžbe za: ${visak.map(s => `${esc(s.naziv)} (${s.visak})`).join(', ')} – to ide na policu.</span>` : ''}</div>
       <h3>Kompletne narudžbe (${r.kompletne.length})</h3>
+      ${r.kompletne.length ? '<p class="siv">Ove narudžbe su odmah označene kao "stiglo". Obavijesti kupce:</p>' : ''}
       ${r.kompletne.length ? `<table><thead><tr><th><input type="checkbox" id="sve" checked></th><th>Br.</th><th>Kupac</th><th>Telefon</th><th class="br">Za platiti</th><th>Obavijesti</th></tr></thead><tbody>
         ${r.kompletne.map(n => `<tr><td><input type="checkbox" class="oznaka" value="${n.id}" checked></td><td>${n.broj}</td><td>${esc(n.kupac)}</td><td>${esc(n.telefon)}</td>
           <td class="br">${kn(n.iznos - n.akontacija)}</td><td>${gumbiObavijesti(n, n.iznos - n.akontacija)}</td></tr>`).join('')}</tbody></table>
-        <div class="traka" style="margin-top:8px"><button class="glavni" id="pStatus">Označi označene kao "stiglo"</button>
-          <button class="glavni" id="pObavijesti">📲 Obavijesti sve označene</button></div>` : '<p class="siv">Nijedna narudžba još nije kompletna.</p>'}`;
+        <div class="traka" style="margin-top:8px"><button class="glavni" id="pObavijesti">📲 Obavijesti sve označene</button></div>` : '<p class="siv">Nijedna narudžba još nije kompletna.</p>'}`;
     if ($('#pObavijesti')) $('#pObavijesti').onclick = () => obavijestiSve(r.kompletne.filter(n => oznacene().includes(n.id)));
     if ($('#sve')) $('#sve').onchange = e => document.querySelectorAll('.oznaka').forEach(c => c.checked = e.target.checked);
-    if ($('#pStatus')) $('#pStatus').onclick = async () => {
-      await api('/api/narudzbe/status', { ids: oznacene(), status: 'stiglo' }); poruka('Status promijenjen.');
-    };
   };
   crtaj();
 }
@@ -1002,7 +1170,7 @@ async function stranicaNakladnici() {
   const [saz, nar] = await Promise.all([api('/api/narudzbenica/prijedlog'), api('/api/narudzbenice')]);
   $('#sadrzaj').innerHTML = `
     <h2>Nakladnici ${S.razina ? `– samo ${S.razina === 'OŠ' ? 'osnovne' : 'srednje'} škole` : ''}</h2>
-    <div class="traka"><span class="siv">Količine za naručiti = naručeno od kupaca (status "naručeno", sezona ${S.sezona}) − već naručeno od nakladnika.
+    <div class="traka"><span class="siv">Količine za naručiti = što kupcima još fali (sezona ${S.sezona}) − ono što je naručeno od nakladnika, a još nije stiglo.
       ${S.razina ? '' : '<br>Gore desno odaberi "Osnovne" ili "Srednje" da ih naručuješ odvojeno.'}</span>
       <div class="desno"><button class="glavni" id="sveNar">⚡ Napravi sve narudžbenice odjednom</button><button onclick="location.hash='#zbirno'">Zbirni popis svih knjiga</button></div></div>
     <table><thead><tr><th>Nakladnik</th><th class="br">Naslova za naručiti</th><th class="br">Komada</th><th></th></tr></thead><tbody>
@@ -1021,7 +1189,9 @@ async function stranicaNakladnici() {
   $('#sveNar').onclick = async () => {
     const za = saz.filter(s => s.komada && s.nakladnik !== 'bez nakladnika');
     if (!za.length) return poruka('Nema ništa za naručiti.', true);
-    if (!confirm(`Napraviti ${za.length} narudžbenica (${za.map(s => s.nakladnik).join(', ')}) s predloženim količinama${S.razina ? ' za ' + (S.razina === 'OŠ' ? 'osnovne' : 'srednje') + ' škole' : ''}?`)) return;
+    const bez = saz.find(s => s.nakladnik === 'bez nakladnika' && s.komada);
+    if (!confirm(`Napraviti ${za.length} narudžbenica (${za.map(s => s.nakladnik).join(', ')}) s predloženim količinama${S.razina ? ' za ' + (S.razina === 'OŠ' ? 'osnovne' : 'srednje') + ' škole' : ''}?`
+      + (bez ? `\n\nPažnja: ${bez.komada} kom (${bez.naslova} naslova) nema upisanog nakladnika – za njih se narudžbenica NE radi. Upiši nakladnika u Knjigama.` : ''))) return;
     const r = await api('/api/narudzbenice/sve', { razina: S.razina });
     poruka(`Napravljeno ${r.ids.length} narudžbenica.`); ispisNarudzbenica(r.ids);
   };
@@ -1059,11 +1229,23 @@ async function stranicaNarudzbenica(param) {
       <button class="glavni" id="nMail">Pošalji e-mailom</button><button onclick="ispisi()">Ispiši</button>
       ${povrat ? '' : `<button class="glavni" id="nExcel" title="Upiše količine u Excel narudžbenicu koju je poslao nakladnik">📗 Popuni Excel nakladnika</button>
         <input type="file" id="nExcelDat" accept=".xlsx" style="display:none">`}
+      ${povrat ? '' : '<button class="glavni" id="nStiglo" title="Upiše sve knjige s ove narudžbenice u Stiglo; ispraviš samo ono što fali">📦 Stiglo je sve s ove narudžbenice</button>'}
       <button onclick="location.href='/csv/narudzbenica?id=${n.id}'">Excel (CSV)</button><button onclick="location.hash='#nakladnici'">Natrag</button>
       <div class="desno"><button class="opasno" id="nObrisi">Obriši</button></div></div>
     ${povrat ? '' : `<p class="siv">Excel obrazac nakladnika: ${n.obrazac ? `<b>${esc(n.obrazac.ime)}</b> (učitan ${datum(n.obrazac.datum)})` : 'još nije učitan – kod prvog klika odaberite datoteku koju je poslao nakladnik'}
       · <a href="#" id="nExcelNovi">učitaj novi obrazac</a></p>`}<div id="nExcelInfo"></div>`;
   $('#ispis').innerHTML = dokument;
+  if ($('#nStiglo')) $('#nStiglo').onclick = () => {
+    if (!S.primka) { try { S.primka = JSON.parse(localStorage.getItem('primka') || '[]'); } catch { S.primka = []; } }
+    for (const s of n.stavke) {
+      const k = s.barkod && S.knjige.find(x => x.barkod === s.barkod), kljuc = s.barkod || s.naziv;
+      const post = S.primka.find(p => (p.barkod || p.naziv) === kljuc);
+      if (post) post.kolicina += s.kolicina;
+      else S.primka.push({ naziv: s.naziv, barkod: s.barkod || '', knjiga_id: k ? k.id : null, kolicina: s.kolicina });
+    }
+    spremiPrimku(); location.hash = '#stiglo';
+    poruka('Upisano ' + n.stavke.reduce((a, s) => a + s.kolicina, 0) + ' knjiga. Ispravi što fali pa "Rasporedi na narudžbe".');
+  };
   $('#nMail').onclick = async () => {
     const email = $('#nEmail').value.trim();
     if (email !== n.email) await api('/api/nakladnik', { naziv: n.nakladnik, email });
@@ -1108,7 +1290,7 @@ async function novaNarudzbenica(nakladnik, povrat) {
     : `
     <h2>Nova narudžbenica – ${esc(nakladnik)}${S.razina ? ` <span class="znacka">${S.razina === 'OŠ' ? 'osnovne škole' : 'srednje škole'}</span>` : ''}</h2>
     <p class="siv">Količine su predložene iz narudžbi kupaca. Možeš ih promijeniti (npr. naručiti više za policu) ili staviti 0.</p>
-    <table><thead><tr><th>Naziv</th><th>Barkod</th><th class="br">Traže kupci</th><th class="br">Već naručeno</th><th class="br">Stanje Vulpes</th><th class="br">Naručiti</th></tr></thead><tbody id="nStavke"></tbody></table>`;
+    <table><thead><tr><th>Naziv</th><th>Barkod</th><th class="br">Kupcima fali</th><th class="br">Naručeno, nije stiglo</th><th class="br">Stanje Vulpes</th><th class="br">Naručiti</th></tr></thead><tbody id="nStavke"></tbody></table>`;
   $('#sadrzaj').innerHTML += `
     <div class="okvir" style="margin-top:12px"><b>Dodaj knjigu:</b><input id="nTrazi" placeholder="Naziv ili barkod…" style="width:100%;margin-top:4px"><div class="prijedlozi" id="nPrijedlozi"></div></div>
     <div class="polja"><label class="sirok">Napomena<input id="nNapomena"></label></div>
@@ -1360,10 +1542,14 @@ function stranicaPostavke() {
 
 /* ------------------------------------------------ Navigacija */
 async function ruta() {
+  if (S.nespremljeno && S.zadnjiHash !== undefined && location.hash !== S.zadnjiHash) {
+    if (!confirm('Narudžba nije spremljena. Otići bez spremanja?')) { history.replaceState(null, '', S.zadnjiHash || '#narudzbe'); return; }
+  }
+  S.nespremljeno = false; S.zadnjiHash = location.hash;
   const h = location.hash || '#narudzbe';
   const kljuc = { '#narudzba': '#narudzbe', '#ucitaj-popis': '#kompleti', '#nova-godina': '#postavke', '#narudzbenica': '#nakladnici', '#zbirno': '#nakladnici' }[h.split('/')[0]] || h.split('/')[0];
   document.querySelectorAll('header a').forEach(a => a.classList.toggle('aktivno', a.getAttribute('href') === kljuc));
-  $('#ispis').innerHTML = ''; $('#sadrzaj').onclick = null;
+  $('#ispis').innerHTML = ''; $('#sadrzaj').onclick = $('#sadrzaj').oninput = $('#sadrzaj').onchange = null;
   if (h === '#nova') return stranicaNarudzba(null);
   if (h.startsWith('#narudzba/')) return stranicaNarudzba(+h.split('/')[1]);
   if (h === '#zbirno') return stranicaZbirno();
@@ -1389,6 +1575,15 @@ document.querySelectorAll('#razina button').forEach(b => b.onclick = () => {
 });
 oznaciRazinu();
 window.onhashchange = ruta;
+window.addEventListener('beforeunload', e => { if (S.nespremljeno) { e.preventDefault(); e.returnValue = ''; } });
+/* Prečaci: F2 nova narudžba, F9 (ili Ctrl+Enter) spremi i ispiši, Ctrl+S spremi */
+document.addEventListener('keydown', e => {
+  if (document.querySelector('.modal')) return;
+  const naNarudzbi = $('#akontacija') && $('#kupac');
+  if (e.key === 'F2') { e.preventDefault(); if (location.hash === '#nova') { if (!S.nespremljeno) ruta(); } else location.hash = '#nova'; }
+  else if (naNarudzbi && (e.key === 'F9' || (e.ctrlKey && e.key === 'Enter'))) { e.preventDefault(); spremiNarudzbu(true); }
+  else if (naNarudzbi && e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); spremiNarudzbu(); }
+});
 ucitajOsnovno().then(ruta);
 </script>
 </body>
