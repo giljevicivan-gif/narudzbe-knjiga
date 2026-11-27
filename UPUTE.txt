@@ -14,6 +14,21 @@ INSTALACIJA (jednom, na svakom računalu)
    (Pokreni.bat i dalje radi - s crnim prozorom, korisno ako treba vidjeti grešku.
    Greške se inače zapisuju u program.log.)
 
+EKRAN "DANAS" (otvori se prvi)
+Na jednom mjestu: narudžbe danas, nove predbilježbe, što je stiglo i koga treba
+obavijestiti, tko nije došao po knjige (⏰), što treba naručiti od nakladnika i je li
+napravljena sigurnosna kopija. Uz svakog kupca: WhatsApp/SMS i "✓ Preuzeto".
+
+NALJEPNICE ZA VREĆICE
+Narudžbe -> označite narudžbe -> "🏷 Naljepnice" (ili u narudžbi gumb "🏷 Naljepnica",
+ili na ekranu Danas). Arak A4 3 × 8 naljepnica 70 × 37 mm. Program pita od koje
+naljepnice početi, pa se napola potrošen arak može iskoristiti. Barkod na naljepnici
+se očita u tražilici narudžbi kao i barkod s potvrde.
+
+DVA RAČUNALA
+Ako je ista narudžba otvorena na dva računala, a na jednom se promijeni (npr. Stiglo),
+drugo računalo je neće pregaziti: javi da ju je netko promijenio i treba je otvoriti ponovno.
+
 ZATVARANJE PROGRAMA
 Program radi u pozadini i kad zatvorite preglednik. Potpuno ga zatvarate crvenim
 gumbom "⏻ Zatvori" gore desno.
@@ -234,7 +249,10 @@ u mapu sigurnosne_kopije (čuva zadnjih 30).
 Dodatna kopija: u Postavkama upišite mapu na USB-u ili Google Drive mapu (npr.
 G:\Moj disk\Knjige ako imate Google Drive za računalo) - program tamo svaki dan stavi
 kopiju (čuva zadnjih 20). U Postavkama piše kad je zadnja kopija uspjela.
-Vraćanje: zatvorite program, kopiju preimenujte u knjige.db i stavite u mapu programa.
+Vraćanje: Postavke -> "Vrati sigurnosnu kopiju…" -> uz željenu kopiju klik "Vrati".
+Sadašnje stanje se prije toga samo spremi kao kopija (prije_vracanja_…), pa se može poništiti.
+(Ručno, samo ako program ne radi: zatvorite program, obrišite knjige.db-wal i knjige.db-shm,
+kopiju preimenujte u knjige.db i stavite u mapu programa.)
 
 PONOVNI PRIJENOS IZ STAROG PROGRAMA (ako zatreba)
 Obrišite knjige.db, pa u naredbenom retku u ovoj mapi:

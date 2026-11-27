@@ -28,7 +28,7 @@ import obrasci
 import popis
 import posta
 
-VERZIJA = '2026.11.28'
+VERZIJA = '2026.11.29'
 MAPA = os.path.dirname(os.path.abspath(__file__))
 BAZA = os.path.join(MAPA, 'knjige.db')
 CONFIG = os.path.join(MAPA, 'postavke.json')
@@ -153,6 +153,20 @@ def init_db():
         # šifre Školske knjige uvijek s nulom na početku
         c.execute("UPDATE knjige SET sifra_nakladnika = '0' || sifra_nakladnika WHERE nakladnik IN ('ŠK', 'ŠKOLSKA KNJIGA', 'SK') "
                   "AND sifra_nakladnika != '' AND sifra_nakladnika NOT LIKE '0%' AND sifra_nakladnika NOT GLOB '*[^0-9]*'")
+        if 'inacica' not in [r[1] for r in c.execute('PRAGMA table_info(narudzbe)')]:
+            c.execute('ALTER TABLE narudzbe ADD COLUMN inacica INTEGER DEFAULT 0')
+        # svaka promjena narudžbe ili njenih knjiga poveća "inačicu" - tako se zna je li netko drugi (npr. Stiglo
+        # na drugom računalu) promijenio narudžbu dok je bila otvorena
+        c.executescript('''
+            CREATE TRIGGER IF NOT EXISTS narudzbe_inacica AFTER UPDATE ON narudzbe WHEN NEW.inacica IS OLD.inacica
+            BEGIN UPDATE narudzbe SET inacica = COALESCE(inacica, 0) + 1 WHERE id = NEW.id; END;
+            CREATE TRIGGER IF NOT EXISTS stavke_inacica_i AFTER INSERT ON stavke
+            BEGIN UPDATE narudzbe SET inacica = COALESCE(inacica, 0) + 1 WHERE id = NEW.narudzba_id; END;
+            CREATE TRIGGER IF NOT EXISTS stavke_inacica_u AFTER UPDATE ON stavke
+            BEGIN UPDATE narudzbe SET inacica = COALESCE(inacica, 0) + 1 WHERE id = NEW.narudzba_id; END;
+            CREATE TRIGGER IF NOT EXISTS stavke_inacica_d AFTER DELETE ON stavke
+            BEGIN UPDATE narudzbe SET inacica = COALESCE(inacica, 0) + 1 WHERE id = OLD.narudzba_id; END;
+        ''')
         nova_kolona = 'azurirano' not in [r[1] for r in c.execute('PRAGMA table_info(kompleti)')]
         if nova_kolona:
             c.execute('ALTER TABLE kompleti ADD COLUMN azurirano INTEGER')
@@ -188,12 +202,21 @@ def sezona(c):
 def sigurnosna_kopija(naziv=None):
     os.makedirs(KOPIJE, exist_ok=True)
     put = os.path.join(KOPIJE, naziv or 'knjige_%s.db' % datetime.datetime.now().strftime('%Y-%m-%d_%H%M'))
-    izvor, cilj = sqlite3.connect(BAZA), sqlite3.connect(put)
+    privremena = put + '.tmp'
+    if os.path.exists(privremena):
+        os.remove(privremena)
+    izvor, cilj = sqlite3.connect(BAZA), sqlite3.connect(privremena)
     try:
         izvor.backup(cilj)
+        cilj.execute('PRAGMA journal_mode=DELETE')  # kopija je jedna samostalna datoteka (bez -wal/-shm)
+        provjera = cilj.execute('PRAGMA quick_check').fetchone()[0]
     finally:
         izvor.close()
         cilj.close()
+    if provjera != 'ok':  # pokvarena kopija se ne čuva, sljedeći put se pokuša ponovno
+        os.remove(privremena)
+        raise RuntimeError('kopija nije ispravna: %s' % provjera)
+    os.replace(privremena, put)
     stare = sorted(f for f in os.listdir(KOPIJE) if f.startswith('dnevna_'))
     for f in stare[:-30]:  # čuvamo zadnjih 30 dnevnih kopija
         os.remove(os.path.join(KOPIJE, f))
@@ -220,6 +243,132 @@ def vanjska_kopija(put):
         stanje = 'GREŠKA %s: %s' % (datetime.datetime.now().strftime('%d.%m.%Y. %H:%M'), e)
     with transakcija() as c:
         c.execute('INSERT OR REPLACE INTO postavke(k, v) VALUES(?, ?)', ('kopija_stanje', stanje))
+
+
+ZDRAVLJE = {'greska': ''}
+_vracanje_lock = threading.Lock()
+
+
+def provjeri_bazu():
+    """Kod pokretanja: je li baza ispravna (ako nije, na ekranu se pokaže crveno upozorenje)."""
+    if not os.path.exists(BAZA):
+        return
+    try:
+        c = sqlite3.connect(BAZA, timeout=10)
+        try:
+            r = c.execute('PRAGMA quick_check').fetchone()[0]
+        finally:
+            c.close()
+        ZDRAVLJE['greska'] = '' if r == 'ok' else r
+    except sqlite3.Error as e:
+        ZDRAVLJE['greska'] = str(e)
+    if ZDRAVLJE['greska']:
+        print('BAZA NIJE ISPRAVNA:', ZDRAVLJE['greska'])
+
+
+def samo_citaj(put):
+    """Otvori kopiju samo za čitanje, bez ikakvih pomoćnih datoteka pored nje."""
+    from urllib.parse import quote
+    return sqlite3.connect('file:%s?immutable=1' % quote(put.replace('\\', '/'), safe='/:'), uri=True)
+
+
+def popis_kopija():
+    """Sve sigurnosne kopije (najnovije prve) s datumom, brojem narudžbi i provjerom ispravnosti."""
+    if not os.path.isdir(KOPIJE):
+        return []
+    out = []
+    for f in os.listdir(KOPIJE):
+        if not f.endswith('.db'):
+            continue
+        put = os.path.join(KOPIJE, f)
+        k = {'ime': f, 'vrijeme': datetime.datetime.fromtimestamp(os.path.getmtime(put)).strftime('%Y-%m-%d %H:%M'),
+             'velicina': os.path.getsize(put), 'narudzbi': None, 'zadnja': None, 'ispravna': False}
+        try:
+            c = samo_citaj(put)
+            try:
+                k['ispravna'] = c.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+                r = c.execute('SELECT COUNT(*), MAX(datum) FROM narudzbe').fetchone()
+                k['narudzbi'], k['zadnja'] = r[0], r[1]
+            finally:
+                c.close()
+        except sqlite3.Error:
+            pass
+        out.append(k)
+    return sorted(out, key=lambda k: k['vrijeme'], reverse=True)
+
+
+def vrati_kopiju(ime):
+    """Vrati bazu iz sigurnosne kopije. Trenutna baza se prije toga spremi kao kopija (može se vratiti natrag)."""
+    if os.path.basename(ime) != ime or not ime.endswith('.db'):
+        raise ValueError('Neispravno ime kopije.')
+    put = os.path.join(KOPIJE, ime)
+    if not os.path.exists(put):
+        raise ValueError('Kopija ne postoji.')
+    izvor = samo_citaj(put)
+    try:
+        try:
+            ok = izvor.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+            ok = ok and izvor.execute("SELECT 1 FROM sqlite_master WHERE name = 'narudzbe'").fetchone()
+        except sqlite3.DatabaseError:
+            ok = False
+        if not ok:
+            raise ValueError('Ova kopija je oštećena – odaberi drugu.')
+        trenutna = sigurnosna_kopija('prije_vracanja_%s.db' % datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S'))
+        cilj = sqlite3.connect(BAZA, timeout=30)
+        try:
+            izvor.backup(cilj)  # ide kroz SQLite, pa ostaci -wal/-shm datoteka ne mogu pokvariti bazu
+        finally:
+            cilj.close()
+    finally:
+        izvor.close()
+    init_db()  # starija kopija dobije nove stupce
+    provjeri_bazu()
+    return {'vraceno': ime, 'spremljena_trenutna': os.path.basename(trenutna)}
+
+
+def danas(c):
+    """Ekran "Danas": sve što treba napraviti na jednom mjestu."""
+    god, dan = sezona(c), datetime.date.today().isoformat()
+    try:
+        dana = int(postavke(c).get('podsjetnik_dana') or 7)
+    except ValueError:
+        dana = 7
+    stiglo = rows(c.execute(
+        'SELECT n.*, s.naziv AS skola, COALESCE(SUM(st.cijena * st.kolicina), 0) AS iznos, '
+        'COALESCE(SUM(st.kolicina), 0) AS komada FROM narudzbe n LEFT JOIN skole s ON s.id = n.skola_id '
+        "LEFT JOIN stavke st ON st.narudzba_id = n.id WHERE n.status = 'stiglo' GROUP BY n.id "
+        'ORDER BY n.stiglo_datum, n.broj'))
+    for n in stiglo:
+        try:
+            n['ceka'] = (datetime.date.today() - datetime.date.fromisoformat(n['stiglo_datum'])).days
+        except (TypeError, ValueError):
+            n['ceka'] = None
+    # djelomično stiglo: neke knjige su stigle, neke ne
+    djelomicno = c.execute(
+        "SELECT COUNT(*) FROM narudzbe n WHERE n.status = 'naručeno' AND n.godina = ? AND EXISTS "
+        '(SELECT 1 FROM stavke st WHERE st.narudzba_id = n.id AND COALESCE(st.stiglo, 0) > 0)', (god,)).fetchone()[0]
+    try:
+        naruciti = [r for r in prijedlog_narudzbenice(c, '') if r['komada']]
+    except Exception:
+        naruciti = []
+    zadnja = sorted(f for f in os.listdir(KOPIJE) if f.startswith('dnevna_')) if os.path.isdir(KOPIJE) else []
+    return {
+        'datum': dan,
+        'danas': dict(c.execute(
+            'SELECT COUNT(DISTINCT n.id) AS narudzbi, COALESCE(SUM(st.cijena * st.kolicina), 0) AS iznos '
+            'FROM narudzbe n LEFT JOIN stavke st ON st.narudzba_id = n.id WHERE n.datum = ?', (dan,)).fetchone()),
+        'predbiljezbe': c.execute("SELECT COUNT(*) FROM predbiljezbe WHERE status = 'nova'").fetchone()[0],
+        'stiglo_novo': [n for n in stiglo if n['ceka'] is None or n['ceka'] < dana],
+        'stiglo_ceka': [n for n in stiglo if n['ceka'] is not None and n['ceka'] >= dana],
+        'podsjetnik_dana': dana,
+        'djelomicno': djelomicno,
+        'naruceno': c.execute("SELECT COUNT(*) FROM narudzbe WHERE status = 'naručeno' AND godina = ?", (god,)).fetchone()[0],
+        'naruciti': naruciti,
+        'kopija': zadnja[-1][7:17] if zadnja else '',
+        'kopija_vanjska': postavke(c).get('kopija_stanje', ''),
+        'kopija_mapa': bool((postavke(c).get('kopija_mapa') or '').strip()),
+        'baza_greska': ZDRAVLJE['greska'],
+    }
 
 
 def kopije_u_pozadini():
@@ -387,13 +536,17 @@ def api_get(c, put, q):
         return {'skole': rows(c.execute('SELECT * FROM skole ORDER BY naziv')),
                 'postavke': postavke(c), 'statusi': STATUSI,
                 'godine': sorted({r[0] for r in c.execute('SELECT DISTINCT godina FROM narudzbe')} | {sezona(c)}, reverse=True),
-                'sezona': sezona(c), 'verzija': VERZIJA,
+                'sezona': sezona(c), 'verzija': VERZIJA, 'baza_greska': ZDRAVLJE['greska'],
                 'predbiljezbe_nove': c.execute("SELECT COUNT(*) FROM predbiljezbe WHERE status = 'nova'").fetchone()[0],
                 'platitelji': [r[0] for r in c.execute("SELECT DISTINCT platitelj FROM narudzbe WHERE platitelj != '' ORDER BY 1")],
                 'otvorene': c.execute("SELECT COUNT(*) FROM narudzbe WHERE status != 'preuzeto' AND godina < ?",
                                       (sezona(c),)).fetchone()[0],
                 'kompleti_stari': c.execute('SELECT COUNT(*) FROM kompleti WHERE COALESCE(azurirano, 0) < ?',
                                             (sezona(c),)).fetchone()[0]}
+    if put == '/api/danas':
+        return danas(c)
+    if put == '/api/kopije':
+        return popis_kopija()
     if put == '/api/knjige':
         return rows(c.execute('SELECT * FROM knjige ORDER BY aktivna DESC, naziv'))
     if put == '/api/kompleti':
@@ -618,10 +771,10 @@ def api_post(c, put, d):
         verzija, _ = nadogradnja.procitaj(sadrzaj)
         if nadogradnja.kljuc(verzija) < nadogradnja.kljuc(VERZIJA):
             raise ValueError('To je starija verzija (%s) od ove koja radi (%s).' % (verzija, VERZIJA))
-        try:  # za svaki slučaj kopija baze prije nadogradnje
+        try:  # bez ispravne kopije baze nema nadogradnje
             sigurnosna_kopija('prije_nadogradnje_%s.db' % VERZIJA)
         except Exception as e:
-            print('Kopija prije nadogradnje nije uspjela:', e)
+            raise ValueError('Nadogradnja nije pokrenuta jer sigurnosna kopija baze nije uspjela (%s).' % e)
         nadogradnja.instaliraj(sadrzaj)
 
         def restart():
@@ -1192,25 +1345,28 @@ def statistika(c, god):
     uk = dict(c.execute(
         'SELECT COUNT(DISTINCT n.id) AS narudzbi, COALESCE(SUM(st.kolicina), 0) AS komada, '
         'COALESCE(SUM(st.kolicina * st.cijena), 0) AS iznos FROM narudzbe n LEFT JOIN stavke st ON st.narudzba_id = n.id '
-        'WHERE n.godina = ?', w).fetchone())
-    uk['uplaceno'] = c.execute('SELECT COALESCE(SUM(akontacija), 0) FROM narudzbe WHERE godina = ?', w).fetchone()[0]
+        "WHERE n.godina = ? AND n.status != 'otkazano'", w).fetchone())
+    # otkazane narudžbe se ne broje (osim u pregledu po statusu)
+    uk['uplaceno'] = c.execute("SELECT COALESCE(SUM(akontacija), 0) FROM narudzbe WHERE godina = ? AND status != 'otkazano'",
+                               w).fetchone()[0]
     po = lambda sql: rows(c.execute(sql, w))
     return {
         'ukupno': uk,
         'po_statusu': po('SELECT status, COUNT(*) AS broj FROM narudzbe WHERE godina = ? GROUP BY status'),
         'po_platitelju': po("SELECT COALESCE(NULLIF(n.platitelj, ''), 'roditelj') AS platitelj, COUNT(DISTINCT n.id) AS narudzbi, "
                             'COALESCE(SUM(st.kolicina * st.cijena), 0) AS iznos FROM narudzbe n '
-                            'LEFT JOIN stavke st ON st.narudzba_id = n.id WHERE n.godina = ? GROUP BY 1 ORDER BY iznos DESC'),
+                            "LEFT JOIN stavke st ON st.narudzba_id = n.id WHERE n.godina = ? AND n.status != 'otkazano' GROUP BY 1 ORDER BY iznos DESC"),
         'po_skoli': po("SELECT COALESCE(s.naziv, '—') AS skola, COUNT(DISTINCT n.id) AS narudzbi, "
                        'COALESCE(SUM(st.kolicina * st.cijena), 0) AS iznos FROM narudzbe n LEFT JOIN skole s ON s.id = n.skola_id '
-                       'LEFT JOIN stavke st ON st.narudzba_id = n.id WHERE n.godina = ? GROUP BY s.naziv ORDER BY iznos DESC'),
+                       "LEFT JOIN stavke st ON st.narudzba_id = n.id WHERE n.godina = ? AND n.status != 'otkazano' GROUP BY s.naziv ORDER BY iznos DESC"),
         'po_nakladniku': po("SELECT COALESCE(NULLIF(st.nakladnik, ''), '—') AS nakladnik, SUM(st.kolicina) AS komada, "
                             'SUM(st.kolicina * st.cijena) AS iznos FROM stavke st JOIN narudzbe n ON n.id = st.narudzba_id '
-                            'WHERE n.godina = ? GROUP BY 1 ORDER BY iznos DESC'),
+                            "WHERE n.godina = ? AND n.status != 'otkazano' GROUP BY 1 ORDER BY iznos DESC"),
         'top_knjige': po('SELECT st.naziv, st.nakladnik, SUM(st.kolicina) AS komada FROM stavke st '
-                         'JOIN narudzbe n ON n.id = st.narudzba_id WHERE n.godina = ? GROUP BY st.naziv '
+                         "JOIN narudzbe n ON n.id = st.narudzba_id WHERE n.godina = ? AND n.status != 'otkazano' GROUP BY st.naziv "
                          'ORDER BY komada DESC LIMIT 20'),
-        'po_danu': po('SELECT datum, COUNT(*) AS broj FROM narudzbe WHERE godina = ? GROUP BY datum ORDER BY datum'),
+        'po_danu': po("SELECT datum, COUNT(*) AS broj FROM narudzbe WHERE godina = ? AND status != 'otkazano' "
+                      'GROUP BY datum ORDER BY datum'),
         'rabljene': dict(c.execute(
             "SELECT COUNT(*) AS otkupljeno, COALESCE(SUM(otkup_cijena), 0) AS otkup, "
             "COALESCE(SUM(CASE WHEN status = 'prodano' THEN 1 END), 0) AS prodano, "
@@ -1230,6 +1386,13 @@ def spremi_narudzbu(c, d):
                  d.get('status') or STATUSI[0], (d.get('platitelj') or '').strip())
     if d.get('id'):
         nid = d['id']
+        zakljucaj(c)
+        sada = c.execute('SELECT inacica FROM narudzbe WHERE id = ?', (nid,)).fetchone()
+        if not sada:
+            raise ValueError('Ova narudžba je u međuvremenu obrisana (možda na drugom računalu). Izmjene nisu spremljene.')
+        if d.get('inacica') is not None and sada[0] != d['inacica']:
+            raise ValueError('Ovu narudžbu je u međuvremenu netko promijenio (npr. Stiglo ili Preuzeto na drugom računalu). '
+                             'Izmjene NISU spremljene – otvori narudžbu ponovno pa ih upiši još jednom.')
         c.execute('UPDATE narudzbe SET kupac = ?, telefon = ?, skola_id = ?, razred = ?, akontacija = ?, '
                   'nacin_pl = ?, napomena = ?, status = ?, platitelj = ? WHERE id = ?', zaglavlje + (nid,))
         c.execute('DELETE FROM stavke WHERE narudzba_id = ?', (nid,))
@@ -1248,7 +1411,7 @@ def spremi_narudzbu(c, d):
     if zaglavlje[7] == 'stiglo':
         c.execute('UPDATE narudzbe SET stiglo_datum = COALESCE(stiglo_datum, ?) WHERE id = ?',
                   (datetime.date.today().isoformat(), nid))
-    return {'id': nid}
+    return {'id': nid, 'inacica': c.execute('SELECT inacica FROM narudzbe WHERE id = ?', (nid,)).fetchone()[0]}
 
 
 # ---------------------------------------------------------------- uvoz popisa knjiga po školama (Excel / CSV)
@@ -1533,6 +1696,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.posalji(403, b'{"greska": "Nedozvoljen zahtjev"}')
         u = urlparse(self.path)
         d = json.loads(self.rfile.read(int(self.headers.get('Content-Length') or 0)) or b'{}')
+        if u.path == '/api/kopija/vrati':  # mora ići bez otvorene veze na bazu
+            try:
+                with _vracanje_lock:
+                    rez = vrati_kopiju(d.get('ime') or '')
+                return self.posalji(200, json.dumps(rez, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                return self.posalji(400, json.dumps({'greska': str(e)}, ensure_ascii=False).encode('utf-8'))
         self.obradi(lambda c: api_post(c, u.path, d))
 
 
@@ -1595,6 +1765,20 @@ def uvoz_starog(mapa):
 def main():
     if sys.stdout is None:  # pokrenuto bez prozora (pythonw) - poruke idu u datoteku
         sys.stdout = sys.stderr = open(os.path.join(MAPA, 'program.log'), 'a', encoding='utf-8', buffering=1)
+    global BAZA
+    if '--provjera' in sys.argv:  # provjera nove verzije radi na privremenoj kopiji baze, prava baza se ne dira
+        import tempfile
+        privremena = os.path.join(tempfile.mkdtemp(prefix='knjige_provjera_'), 'knjige.db')
+        if os.path.exists(BAZA):
+            izvor, cilj = sqlite3.connect(BAZA), sqlite3.connect(privremena)
+            try:
+                izvor.backup(cilj)
+            finally:
+                izvor.close()
+                cilj.close()
+        BAZA = privremena
+    else:
+        provjeri_bazu()
     init_db()
     if '--provjera' in sys.argv:  # nadogradnja provjerava može li se nova verzija pokrenuti
         ThreadingHTTPServer(('127.0.0.1', 0), Handler).server_close()  # i može li se pokrenuti poslužitelj
@@ -1602,6 +1786,7 @@ def main():
             if '</html>' not in f.read():
                 raise SystemExit('index.html je oštećen')
         print('ok', VERZIJA)
+        shutil.rmtree(os.path.dirname(BAZA), ignore_errors=True)
         return
     if len(sys.argv) > 2 and sys.argv[1] == '--uvoz':
         return uvoz_starog(sys.argv[2])
