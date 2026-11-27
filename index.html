@@ -61,6 +61,12 @@
   .logo { float: left; height: 68px; margin-right: 10px; }
   .logo.mali { height: 46px; }
   .listic svg { display: block; margin-top: 2px; }
+  .naljepnice { display: grid; grid-template-columns: repeat(3, 70mm); grid-auto-rows: 37mm; width: 210mm; page-break-after: always; }
+  .naljepnica { box-sizing: border-box; padding: 2.5mm 3.5mm; overflow: hidden; font-size: 10px; line-height: 1.2; }
+  .naljepnica .br { font-size: 17px; font-weight: 700; }
+  .naljepnica .ime { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .naljepnica svg { display: block; margin-top: 1mm; }
+  .naljepnice.rub .naljepnica { outline: 0.2mm dashed #bbb; }
   .skob { position: relative; width: 190mm; height: 276mm; page-break-after: always; font-size: 10.5px; line-height: 1.25; overflow: hidden; }
   .skob > div { position: absolute; }
   .skm { width: 6mm; height: 6mm; background: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -77,7 +83,7 @@
   #ispis { display: none; }
   @page { size: A4; margin: 9mm; }
   @media print {
-    header, main, #poruka, #nadBanner, #upozBanner { display: none !important; }
+    header, main, #poruka, #nadBanner, #upozBanner, #bazaBanner { display: none !important; }
     #ispis { display: block; font-size: 12px; }
     #ispis table { margin: 6px 0; }
     #ispis th { background: none; border-bottom: 1px solid #000; }
@@ -88,6 +94,7 @@
 <body>
 <header>
   <b>📚 Narudžbe knjiga <small id="verzijaZag" style="font-weight:normal;opacity:.75;font-size:12px"></small></b>
+  <a href="#danas">Danas</a>
   <a href="#narudzbe">Narudžbe</a>
   <a href="#nova">+ Nova narudžba</a>
   <a href="#predbiljezbe">Predbilježbe <span id="brPred" class="znacka crvena" style="display:none"></span></a>
@@ -103,6 +110,7 @@
   <button id="zatvoriZag" onclick="zatvoriProgram()" title="Potpuno zatvara program (radi u pozadini i kad zatvorite preglednik)" style="margin-left:6px;background:#b91c1c;color:#fff;border:0;border-radius:6px;padding:5px 9px;font-weight:600;cursor:pointer;white-space:nowrap">⏻ Zatvori</button>
 </header>
 <div id="nadBanner" style="display:none;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:10px 16px;font-size:16px"></div>
+<div id="bazaBanner" style="display:none;background:#fee2e2;border-bottom:3px solid #b91c1c;padding:10px 16px;font-size:16px"></div>
 <div id="upozBanner" style="display:none;background:#eff6ff;border-bottom:2px solid #93c5fd;padding:8px 16px"></div>
 <main id="sadrzaj"></main>
 <div id="ispis"></div>
@@ -198,6 +206,11 @@ async function ucitajOsnovno() {
   if (!S.upozorenjaProvjerena) { S.upozorenjaProvjerena = true; prikaziUpozorenja(); }
   osvjeziBrojPred();
   $('#verzijaZag').textContent = 'v' + S.verzija;
+  if (S.baza_greska) {
+    $('#bazaBanner').innerHTML = `⚠️ <b>Baza podataka nije ispravna</b> (${esc(S.baza_greska)}). Ne upisujte ništa novo – idite u
+      <a href="#postavke">Postavke → Sigurnosne kopije</a> i vratite zadnju ispravnu kopiju (ili nazovite pomoć).`;
+    $('#bazaBanner').style.display = 'block';
+  } else $('#bazaBanner').style.display = 'none';
   S.knjige = await api('/api/knjige');
   S.kompleti = await api('/api/kompleti');
 }
@@ -416,6 +429,7 @@ async function stranicaNarudzbe() {
     <div class="traka">Označene: <select id="noviStatus">${statusOpcije('stiglo')}</select>
       <button onclick="promijeniStatus()">Promijeni status</button>
       <button onclick="ispisListica()">Ispiši listiće</button>
+      <button onclick="ispisNaljepnica()" title="Naljepnice za vrećice s knjigama (broj, kupac, škola, barkod)">🏷 Naljepnice</button>
       <button onclick="obavijestiSve(S.vidljiveNarudzbe.filter(n => oznacene().includes(n.id)))" title="Redom pošalji WhatsApp/SMS svim označenima">📲 Obavijesti označene</button>
       <button onclick="ispisZaSkolu('ponuda', oznacene())" title="Ponuda za školu (označene narudžbe iste škole, npr. po razredima)">📄 Ponuda</button>
       <button onclick="ispisZaSkolu('otpremnica', oznacene())" title="Otpremnica za školu (označene narudžbe, grupirane po razredima)">🚚 Otpremnica</button>
@@ -540,6 +554,88 @@ async function ispisListica(ids = oznacene()) {
   }).join('');
   await ispisi();
 }
+/* Naljepnice za vrećice s knjigama: A4 arak 3 × 8 (70 × 37 mm). Može se početi od bilo koje naljepnice na arku. */
+async function ispisNaljepnica(ids = oznacene()) {
+  if (!ids.length) return poruka('Označi narudžbe kvačicom.', true);
+  let od;
+  try { od = localStorage.getItem('naljepniceOd') || '1'; } catch { od = '1'; }
+  const odg = prompt(`Ispis ${ids.length} naljepnic${ids.length === 1 ? 'e' : 'a'} na arak 3 × 8 (70 × 37 mm).\nOd koje naljepnice na arku početi? (1–24; 1 = gore lijevo)`, '1');
+  if (odg === null) return;
+  od = Math.min(24, Math.max(1, parseInt(odg) || 1));
+  const ns = await Promise.all(ids.map(id => api('/api/narudzba?id=' + id)));
+  const prazne = Array(od - 1).fill('<div class="naljepnica"></div>');
+  const sve = prazne.concat(ns.map(n => {
+    const kom = n.stavke.reduce((a, s) => a + s.kolicina, 0);
+    return `<div class="naljepnica">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="br">${n.broj}/${n.godina}</span><span>${kom} knj.</span></div>
+      <div class="ime">${esc(n.kupac)}</div>
+      <div>${esc(n.skola || '')}${n.razred ? ` · ${esc(n.razred)}. r.` : ''}${n.telefon ? ` · ${esc(n.telefon)}` : ''}</div>
+      ${ean13(kodNarudzbe(n), 20)}</div>`;
+  }));
+  let html = '<style>@page { size: A4; margin: 11.5mm 0 0 0; }</style>';
+  for (let i = 0; i < sve.length; i += 24) html += `<div class="naljepnice">${sve.slice(i, i + 24).join('')}</div>`;
+  $('#ispis').innerHTML = html;
+  try { localStorage.setItem('naljepniceOd', String((od - 1 + ns.length) % 24 + 1)); } catch { }
+  await ispisi();
+}
+
+/* ------------------------------------------------ Danas: sve što treba napraviti na jednom mjestu */
+async function stranicaDanas() {
+  const d = await api('/api/danas');
+  const dan = new Date().toLocaleDateString('hr-HR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const red = n => `<tr class="klik" data-id="${n.id}"><td>${n.broj}/${n.godina}</td><td><b>${esc(n.kupac)}</b></td><td>${esc(n.telefon)}</td>
+    <td>${esc(n.skola || '')} ${esc(n.razred)}</td><td class="br">${kn(n.iznos - n.akontacija)}</td>
+    <td>${n.ceka == null ? '' : n.ceka === 0 ? 'stiglo danas' : `čeka ${n.ceka} d`}</td>
+    <td class="nema-klik">${gumbiObavijesti(n, n.iznos - n.akontacija)} <button class="mali" data-preuzmi="${n.id}" style="background:var(--zelena);color:#fff;border-color:var(--zelena)">✓ Preuzeto</button></td></tr>`;
+  const tablica = (l, prazno) => l.length ? `<table><thead><tr><th>Br.</th><th>Kupac</th><th>Telefon</th><th>Škola</th><th class="br">Za platiti</th><th></th><th></th></tr></thead>
+    <tbody>${l.map(red).join('')}</tbody></table>` : `<p class="siv">${prazno}</p>`;
+  const kartica = (broj, tekst, link, boja = '') => `<a class="okvir" href="${link}" ${link.startsWith('#danas-') ? `onclick="event.preventDefault();document.getElementById('${link.slice(1)}').scrollIntoView({behavior:'smooth'})"` : ''} style="display:block;text-decoration:none;color:inherit;min-width:160px;flex:1;${boja}">
+    <div style="font-size:28px;font-weight:700">${broj}</div><div>${tekst}</div></a>`;
+  const kopijaStara = !d.kopija || (Date.now() - new Date(d.kopija)) / 864e5 > 2;
+  const vanjskaLose = d.kopija_mapa && !String(d.kopija_vanjska).startsWith('OK');
+  const naruciKom = d.naruciti.reduce((a, r) => a + r.komada, 0);
+  $('#sadrzaj').innerHTML = `
+    <h2>Danas <span class="siv" style="font-size:16px">${esc(dan)}</span></h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      ${kartica(d.danas.narudzbi, `narudžbi danas · ${kn(d.danas.iznos)}`, '#narudzbe')}
+      ${kartica(d.predbiljezbe, 'novih predbilježbi s interneta', '#predbiljezbe', d.predbiljezbe ? 'border-color:#dc2626;background:#fef2f2' : '')}
+      ${kartica(d.stiglo_novo.length + d.stiglo_ceka.length, 'stiglo – čeka kupca', '#danas-stiglo', d.stiglo_ceka.length ? 'border-color:#f59e0b;background:#fffbeb' : '')}
+      ${kartica(naruciKom, `knjiga treba naručiti (${d.naruciti.length} nakladnik${d.naruciti.length === 1 ? '' : 'a'})`, '#nakladnici', naruciKom ? 'border-color:#2563eb;background:#eff6ff' : '')}
+      ${kartica(d.naruceno, `naručeno, čeka nakladnika${d.djelomicno ? ` (${d.djelomicno} djelomično stiglo)` : ''}`, '#stiglo')}
+    </div>
+    <div class="traka"><button class="glavni" onclick="location.hash='#nova'">+ Nova narudžba (F2)</button>
+      <button onclick="location.hash='#stiglo'">📦 Stigle su knjige</button>
+      <button onclick="location.hash='#nakladnici'">📝 Naruči od nakladnika</button>
+      <button onclick="location.hash='#narudzbe'">Sve narudžbe</button></div>
+    ${d.baza_greska ? `<div class="okvir" style="border-color:#b91c1c;background:#fee2e2">⚠️ <b>Baza nije ispravna.</b> Idi u <a href="#postavke">Postavke</a> i vrati zadnju ispravnu kopiju.</div>` : ''}
+    <div class="okvir" id="danas-stiglo"><b>⏰ Stiglo prije ${d.podsjetnik_dana} i više dana, a kupac nije došao (${d.stiglo_ceka.length})</b>
+      ${d.stiglo_ceka.length ? `<button class="mali" id="dPodsjeti" style="margin-left:8px">📲 Podsjeti sve redom</button>` : ''}
+      ${tablica(d.stiglo_ceka, 'Nema – svi su na vrijeme došli po knjige.')}</div>
+    <div class="okvir"><b>📦 Stiglo nedavno – obavijesti kupca (${d.stiglo_novo.length})</b>
+      ${d.stiglo_novo.length ? `<button class="mali" id="dObavijesti" style="margin-left:8px">📲 Obavijesti sve redom</button>
+        <button class="mali" id="dNaljepnice">🏷 Naljepnice za vrećice</button>` : ''}
+      ${tablica(d.stiglo_novo, 'Nema novih.')}</div>
+    ${d.naruciti.length ? `<div class="okvir"><b>📝 Treba naručiti od nakladnika</b>
+      <table><tbody>${d.naruciti.map(r => `<tr><td>${esc(r.nakladnik)}</td><td class="br">${r.naslova} naslova</td><td class="br"><b>${r.komada} kom.</b></td></tr>`).join('')}</tbody></table>
+      <button class="mali glavni" onclick="location.hash='#nakladnici'">Napravi narudžbenice…</button></div>` : ''}
+    <p class="siv">Zadnja automatska kopija baze: ${d.kopija ? datum(d.kopija) : '<b style="color:#b91c1c">još nema</b>'}${kopijaStara && d.kopija ? ' <b style="color:#b91c1c">(stara!)</b>' : ''}
+      ${d.kopija_mapa ? ` · dodatna (USB/Drive): ${vanjskaLose ? `<b style="color:#b91c1c">${esc(d.kopija_vanjska || 'još nije napravljena')}</b>` : esc(String(d.kopija_vanjska).slice(3, 21))}` : ''}</p>`;
+  const sveStiglo = d.stiglo_novo.concat(d.stiglo_ceka);
+  $('#sadrzaj').onclick = async e => {
+    const p = e.target.closest('[data-preuzmi]');
+    if (p) {
+      const n = sveStiglo.find(x => x.id == p.dataset.preuzmi);
+      if (await preuzmiNarudzbu(n, n.iznos)) stranicaDanas();
+      return;
+    }
+    if (e.target.closest('.nema-klik, a, button')) return;
+    const tr = e.target.closest('tr[data-id]'); if (tr) location.hash = '#narudzba/' + tr.dataset.id;
+  };
+  if ($('#dObavijesti')) $('#dObavijesti').onclick = () => obavijestiSve(d.stiglo_novo);
+  if ($('#dPodsjeti')) $('#dPodsjeti').onclick = () => obavijestiSve(d.stiglo_ceka);
+  if ($('#dNaljepnice')) $('#dNaljepnice').onclick = () => ispisNaljepnica(d.stiglo_novo.map(n => n.id));
+}
+
 async function ispisPopisa() {
   const ns = S.vidljiveNarudzbe || [];
   $('#ispis').innerHTML = zaglavljeIspisa(`Datum: ${datum(new Date().toLocaleDateString('sv-SE'))}`) + `<h3>Popis narudžbi (${ns.length})</h3><table><thead><tr><th>Br.</th><th>Datum</th><th>Kupac</th><th>Telefon</th><th>Škola</th><th>Raz.</th><th class="br">Iznos</th><th class="br">Ostatak</th><th>Status</th></tr></thead><tbody>
@@ -581,6 +677,7 @@ async function stranicaNarudzba(id) {
       <button class="glavni" onclick="spremiNarudzbu(true)" title="Prečac: F9">Spremi i ispiši (F9)</button>
       ${id && ['naručeno', 'stiglo'].includes(n.status) ? '<button class="glavni" id="nPreuzmi" style="background:var(--zelena);border-color:var(--zelena)">✓ Preuzeto i plaćeno</button>' : ''}
       <button onclick="history.back()">Odustani</button>
+      ${id ? `<button onclick="ispisNaljepnica([${id}])" title="Naljepnica za vrećicu s knjigama">🏷 Naljepnica</button>` : ''}
       ${id ? `<button onclick="ispisZaSkolu('ponuda', [${id}])" title="Ponuda (npr. za školu ili Grad)">📄 Ponuda</button><button onclick="ispisZaSkolu('otpremnica', [${id}])">🚚 Otpremnica</button>` : ''}
       <span class="siv">F2 = nova narudžba</span>
       ${id ? `<span id="obavijest"></span>` : ''}
@@ -699,8 +796,8 @@ async function spremiNarudzbu(ispisi, ostani) {
     const d = { ...S.n, kupac: $('#kupac').value, telefon: $('#telefon').value, skola_id: sk && sk !== '+' ? +sk : null,
       razred: $('#razred').value, akontacija: broj($('#akontacija').value), nacin_pl: $('#nacin_pl').value,
       status: $('#status').value, napomena: $('#napomena').value, platitelj: $('#platitelj').value };
-    const { id } = await api('/api/narudzba', d);
-    S.n.id = id; S.nespremljeno = false;
+    const { id, inacica } = await api('/api/narudzba', d);
+    S.n.id = id; S.n.inacica = inacica; S.nespremljeno = false;
     poruka('Narudžba spremljena.');
     ({ godine: S.godine, platitelji: S.platitelji } = await api('/api/init'));
     if (ispisi) await ispisListica([id]);
@@ -1545,7 +1642,9 @@ function stranicaPostavke() {
       <div class="traka" style="margin-top:8px"><button class="glavni" onclick="location.hash='#nova-godina'">Otvaranje nove godine…</button>
         <button id="kopija">Napravi sigurnosnu kopiju</button>
         <button class="opasno" id="ugasi" title="Program radi u pozadini; ovdje ga potpuno zatvarate">Zatvori program</button></div>
-      <p class="siv">Program sam napravi kopiju baze jednom dnevno (mapa sigurnosne_kopije, čuva se zadnjih 30).</p></div>
+      <p class="siv">Program sam napravi kopiju baze jednom dnevno (mapa sigurnosne_kopije, čuva se zadnjih 30). Svaka kopija se odmah provjeri.</p>
+      <details id="kopijeOkvir"><summary><b>Vrati sigurnosnu kopiju…</b> <span class="siv">(ako je nešto krivo obrisano ili se baza pokvarila)</span></summary>
+        <div id="kopijeLista" class="siv">Učitavam…</div></details></div>
     <div class="okvir"><b>Nadogradnja programa</b> <span class="siv">– trenutna verzija ${esc(S.verzija || '')}</span>
       <p class="siv" style="margin:6px 0">Datoteku "Narudzbe-knjiga-nadogradnja-….zip" samo spremite u Preuzimanja ili na radnu površinu – program je sam pronađe i ponudi.
         Ili je odaberite ovdje. Podaci se ne diraju; Setup više ne treba pokretati.</p>
@@ -1587,6 +1686,25 @@ function stranicaPostavke() {
     else poruka('Imate najnoviju verziju (' + r.verzija + ').');
   };
   $('#nadDat').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (f) nadogradi({ sadrzaj: await datotekaBase64(f) }); };
+  $('#kopijeOkvir').ontoggle = async () => {
+    if (!$('#kopijeOkvir').open) return;
+    const l = await api('/api/kopije');
+    const opis = k => k.ime.startsWith('dnevna_') ? 'dnevna' : k.ime.startsWith('prije_nadogradnje') ? 'prije nadogradnje'
+      : k.ime.startsWith('prije_vracanja') ? 'prije vraćanja kopije' : k.ime.startsWith('prije_sezone') ? 'prije nove sezone' : 'ručna';
+    $('#kopijeLista').innerHTML = l.length ? `<p>Odaberi kopiju i klikni <b>Vrati</b>. Sadašnji podaci se prije toga sami spreme kao kopija, pa se i to može poništiti.</p>
+      <table><thead><tr><th>Napravljena</th><th>Vrsta</th><th class="br">Narudžbi</th><th>Zadnja narudžba</th><th>Ispravna</th><th></th></tr></thead><tbody>
+      ${l.map((k, i) => `<tr><td>${datum(k.vrijeme.slice(0, 10))} ${k.vrijeme.slice(11)}</td><td>${opis(k)}</td><td class="br">${k.narudzbi ?? '–'}</td>
+        <td>${datum(k.zadnja)}</td><td>${k.ispravna ? '✓' : '<b style="color:#b91c1c">✕ oštećena</b>'}</td>
+        <td>${k.ispravna ? `<button class="mali" data-vrati="${i}">Vrati</button>` : ''}</td></tr>`).join('')}</tbody></table>` : 'Još nema nijedne kopije.';
+    $('#kopijeLista').onclick = async e => {
+      const b = e.target.closest('[data-vrati]'); if (!b) return;
+      const k = l[+b.dataset.vrati];
+      if (!confirm(`Vratiti podatke na stanje od ${datum(k.vrijeme.slice(0, 10))} ${k.vrijeme.slice(11)} (${k.narudzbi} narudžbi)?\n\nSve upisano nakon toga nestaje iz programa (ali sadašnje stanje se prije toga spremi kao kopija).`)) return;
+      const r = await api('/api/kopija/vrati', { ime: k.ime });
+      alert('Podaci su vraćeni iz kopije. Sadašnje stanje prije vraćanja je spremljeno kao "' + r.spremljena_trenutna + '".');
+      location.hash = '#danas'; location.reload();
+    };
+  };
   $('#kopija').onclick = async () => {
     await spremi(); const r = await api('/api/kopija', {});
     S.postavke = (await api('/api/init')).postavke;
@@ -2193,10 +2311,10 @@ function crtajSken() {
 /* ------------------------------------------------ Navigacija */
 async function ruta() {
   if (S.nespremljeno && S.zadnjiHash !== undefined && location.hash !== S.zadnjiHash) {
-    if (!confirm('Narudžba nije spremljena. Otići bez spremanja?')) { history.replaceState(null, '', S.zadnjiHash || '#narudzbe'); return; }
+    if (!confirm('Narudžba nije spremljena. Otići bez spremanja?')) { history.replaceState(null, '', S.zadnjiHash || '#danas'); return; }
   }
   S.nespremljeno = false; S.zadnjiHash = location.hash;
-  const h = location.hash || '#narudzbe';
+  const h = location.hash || '#danas';
   const kljuc = { '#narudzba': '#narudzbe', '#skola-narudzba': '#narudzbe', '#skenirani': '#narudzbe', '#ucitaj-popis': '#kompleti', '#nova-godina': '#postavke', '#narudzbenica': '#nakladnici', '#zbirno': '#nakladnici' }[h.split('/')[0]] || h.split('/')[0];
   document.querySelectorAll('header a').forEach(a => a.classList.toggle('aktivno', a.getAttribute('href') === kljuc));
   $('#ispis').innerHTML = ''; $('#sadrzaj').onclick = $('#sadrzaj').oninput = $('#sadrzaj').onchange = null;
@@ -2216,7 +2334,8 @@ async function ruta() {
   if (h === '#statistika') return stranicaStatistika();
   if (h === '#knjige') return stranicaKnjige();
   if (h === '#postavke') return stranicaPostavke();
-  return stranicaNarudzbe();
+  if (h === '#narudzbe') return stranicaNarudzbe();
+  return stranicaDanas();
 }
 try { S.razina = localStorage.getItem('razina') || ''; } catch { S.razina = ''; }
 const oznaciRazinu = () => document.querySelectorAll('#razina button').forEach(b => b.classList.toggle('aktivno', b.dataset.r === S.razina));
