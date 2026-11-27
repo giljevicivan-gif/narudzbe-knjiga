@@ -196,6 +196,28 @@ BRŽI RAD (od verzije 2026.11.27)
 - Kompleti: "✓ Popis isti kao lani" za označene komplete. Knjige: "Usporedi cijene s
   Vulpesom" -> "Predloži Vulpes artikle po nazivu" poveže više knjiga odjednom.
 
+NARUDŽBE ŠKOLA I NAKLADNICI (od verzije 2026.11.28)
+- Narudžbe -> "🏫 Narudžba škole iz datoteke": izaberite školu i datoteku koju je škola
+  poslala (Excel, PDF, Word, stari .xls/.doc, sken ili slika). Program pročita knjige i
+  količine, poveže ih s katalogom i napravi narudžbu (po želji jednu po razredu).
+  Sken i slika se čitaju malo duže (pola minute do minute) i treba internet.
+- Označene narudžbe -> "📄 Ponuda" ili "🚚 Otpremnica" za školu. Adresu, OIB i e-mail
+  škole upišite u Postavkama (tablica škola), a OIB, IBAN i napomenu firme gore u Postavkama.
+- Kompleti -> označite komplete -> "🖨 Obrasci za skeniranje": roditelji kvačicama
+  označe knjige. Popunjene obrasce skenirajte ili slikajte mobitelom pa
+  Narudžbe -> "📷 Skenirani obrasci": program prepozna kvačice, vi provjerite ime i
+  mobitel i Enter sprema narudžbu.
+- Slanje narudžbenica e-mailom: u Postavkama jednom upišite svoju e-mail adresu i
+  "lozinku za aplikacije" (za Gmail: myaccount.google.com/apppasswords) i kliknite
+  "Pošalji probni e-mail". Onda na narudžbenici "📧 Pošalji e-mailom s Excelom", ili na
+  Nakladnicima "📧 Pošalji e-mailom sve današnje neposlane". U stupcu "Poslano" piše kad
+  je otišlo. Kopija svakog e-maila stiže i vama.
+- Stiglo -> "📄 Učitaj eRačun ili otpremnicu": XML eRačun ili Excel otpremnica nakladnika
+  upiše cijelu pošiljku odjednom. Program zapamti šifre nakladnika za sljedeći put.
+- Šifra nakladnika: upisuje se kod knjige (Knjige -> klik na knjigu). Šifre Školske
+  knjige uvijek počinju nulom - program sam dodaje nulu ako je nema (i za stare šifre).
+  Excel obrazac nakladnika popunjava se po barkodu, a gdje barkoda nema, po šifri.
+
 VIŠE RAČUNALA
 Program radi na jednom računalu. Da bi ga koristila i druga računala u mreži,
 u datoteci postavke.json stavite "mreza": true, ponovno pokrenite i na drugom

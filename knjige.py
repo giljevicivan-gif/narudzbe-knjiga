@@ -21,12 +21,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import dbf
+import eracun
 import javno
 import nadogradnja
 import obrasci
 import popis
+import posta
 
-VERZIJA = '2026.11.27'
+VERZIJA = '2026.11.28'
 MAPA = os.path.dirname(os.path.abspath(__file__))
 BAZA = os.path.join(MAPA, 'knjige.db')
 CONFIG = os.path.join(MAPA, 'postavke.json')
@@ -58,6 +60,8 @@ CREATE TABLE IF NOT EXISTS narudzbenice(id INTEGER PRIMARY KEY, godina INTEGER, 
   nakladnik TEXT, napomena TEXT DEFAULT '');
 CREATE TABLE IF NOT EXISTS narudzbenice_stavke(id INTEGER PRIMARY KEY, narudzbenica_id INTEGER, naziv TEXT,
   barkod TEXT DEFAULT '', kolicina INTEGER, cijena REAL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS obrasci_ispis(id INTEGER PRIMARY KEY, komplet_id INTEGER, skola_id INTEGER, razred TEXT,
+  naziv TEXT, knjige TEXT, datum TEXT);
 CREATE TABLE IF NOT EXISTS rabljene(id INTEGER PRIMARY KEY, knjiga_id INTEGER, naziv TEXT, barkod TEXT DEFAULT '',
   ocuvanost TEXT DEFAULT '', otkup_cijena REAL DEFAULT 0, prodajna_cijena REAL DEFAULT 0, datum_otkupa TEXT,
   prodavatelj TEXT DEFAULT '', telefon TEXT DEFAULT '', status TEXT DEFAULT 'na stanju', datum_prodaje TEXT,
@@ -84,6 +88,10 @@ ZADANE_POSTAVKE = {
     'predbiljezba_adresa': '',
     'kopija_mapa': '',
     'kopija_stanje': '',
+    'oib': '',
+    'iban': '',
+    'email_firme': '',
+    'ponuda_napomena': 'Cijene su s uključenim PDV-om. Ponuda vrijedi 30 dana.',
 }
 # ključ knjige u stavkama: barkod ako postoji, inače naziv
 KLJUC = "COALESCE(NULLIF(TRIM({0}barkod), ''), {0}naziv)"
@@ -133,6 +141,18 @@ def init_db():
             c.execute("ALTER TABLE narudzbenice ADD COLUMN razina TEXT DEFAULT ''")
         if 'tip' not in [r[1] for r in c.execute('PRAGMA table_info(narudzbenice)')]:
             c.execute("ALTER TABLE narudzbenice ADD COLUMN tip TEXT DEFAULT 'narudzba'")
+        stupci_s = [r[1] for r in c.execute('PRAGMA table_info(skole)')]
+        for k in ('adresa', 'oib', 'email'):
+            if k not in stupci_s:
+                c.execute("ALTER TABLE skole ADD COLUMN %s TEXT DEFAULT ''" % k)
+        stupci_nb = [r[1] for r in c.execute('PRAGMA table_info(narudzbenice)')]
+        if 'poslano' not in stupci_nb:
+            c.execute("ALTER TABLE narudzbenice ADD COLUMN poslano TEXT DEFAULT ''")
+        if 'sifra_nakladnika' not in [r[1] for r in c.execute('PRAGMA table_info(knjige)')]:
+            c.execute("ALTER TABLE knjige ADD COLUMN sifra_nakladnika TEXT DEFAULT ''")
+        # šifre Školske knjige uvijek s nulom na početku
+        c.execute("UPDATE knjige SET sifra_nakladnika = '0' || sifra_nakladnika WHERE nakladnik IN ('ŠK', 'ŠKOLSKA KNJIGA', 'SK') "
+                  "AND sifra_nakladnika != '' AND sifra_nakladnika NOT LIKE '0%' AND sifra_nakladnika NOT GLOB '*[^0-9]*'")
         nova_kolona = 'azurirano' not in [r[1] for r in c.execute('PRAGMA table_info(kompleti)')]
         if nova_kolona:
             c.execute('ALTER TABLE kompleti ADD COLUMN azurirano INTEGER')
@@ -476,6 +496,8 @@ def api_get(c, put, q):
                               (st,) if st else ()))
     if put == '/api/statistika':
         return statistika(c, int(g('godina') or sezona(c)))
+    if put == '/api/email/postavke':
+        return email_javno(email_postavke())
     raise KeyError(put)
 
 
@@ -514,7 +536,11 @@ def zbirno(c, godina, status, skola, razina=''):
 
 def api_post(c, put, d):
     if put == '/api/knjiga':
-        polja = ('naziv', 'vrsta', 'autori', 'nakladnik', 'cijena', 'barkod', 'vulpes_sifra', 'aktivna')
+        polja = ('naziv', 'vrsta', 'autori', 'nakladnik', 'cijena', 'barkod', 'vulpes_sifra', 'aktivna', 'sifra_nakladnika')
+        if d.get('id') and 'sifra_nakladnika' not in d:
+            polja = polja[:-1]  # ne diraj šifru ako je obrazac nije poslao
+        else:
+            d['sifra_nakladnika'] = sifra_nakladnika(d.get('nakladnik'), d.get('sifra_nakladnika'))
         vr = [d.get(p) for p in polja]
         if not (d.get('naziv') or '').strip():
             raise ValueError('Upiši naziv knjige.')
@@ -527,6 +553,11 @@ def api_post(c, put, d):
     if put == '/api/skola':
         if d.get('id') and d.get('tip') in ('OŠ', 'SŠ'):
             c.execute('UPDATE skole SET tip = ? WHERE id = ?', (d['tip'], d['id']))
+            return {'id': d['id']}
+        if d.get('id') and any(k in d for k in ('adresa', 'oib', 'email')):  # podaci škole za ponudu / otpremnicu
+            for k in ('adresa', 'oib', 'email'):
+                if k in d:
+                    c.execute('UPDATE skole SET %s = ? WHERE id = ?' % k, ((d[k] or '').strip(), d['id']))
             return {'id': d['id']}
         return {'id': skola_id(c, d['naziv'])}
     if put == '/api/komplet':
@@ -661,7 +692,7 @@ def api_post(c, put, d):
         if put == '/api/popis/predlozi':
             st = {k: d.get(k) or '' for k in ('naslov', 'autori', 'nakladnik', 'sifra')}
             return popis.predlozi(st, *popis.kandidati(katalog, vulpes))
-        redovi = popis.redovi_iz_datoteke(d['ime'], base64.b64decode(d['sadrzaj']))
+        redovi = d.get('redovi') or popis.redovi_iz_datoteke(d['ime'], base64.b64decode(d['sadrzaj']))
         sekcije = popis.analiziraj(redovi, katalog, vulpes)
         mzo = {r['sifra']: r for r in rows(c.execute("SELECT * FROM mzo_katalog WHERE sifra != ''"))}
         if mzo:
@@ -679,6 +710,34 @@ def api_post(c, put, d):
         return {'sekcije': sekcije, 'vulpes': bool(vulpes)}
     if put == '/api/popis/spremi':
         return spremi_popis(c, d)
+    if put == '/api/skola-narudzba/analiziraj':
+        redovi = d.get('redovi')
+        if redovi and d.get('dijelovi'):  # prepoznati sken: probaj složiti tablicu po položaju riječi
+            try:
+                tab = popis.pdf_narudzba_redovi(stranice=[[tuple(x) for x in st] for st in d['dijelovi']])
+            except Exception:
+                tab = []
+            if len(popis.narudzba_iz_redova(tab)) >= len(popis.narudzba_iz_redova(redovi)):
+                redovi = tab or redovi
+        if not redovi:
+            sadrzaj = base64.b64decode(d['sadrzaj'])
+            redovi = popis.redovi_iz_datoteke(d['ime'], sadrzaj)
+            if sadrzaj[:5] == b'%PDF-':  # tablica iz PDF-a: posebno čitanje koje bolje složi stupce i prelomljene redove
+                try:
+                    pdf_redovi = popis.pdf_narudzba_redovi(sadrzaj)
+                except Exception:
+                    pdf_redovi = []
+                if len(popis.narudzba_iz_redova(pdf_redovi)) >= len(popis.narudzba_iz_redova(redovi)):
+                    redovi = pdf_redovi or redovi
+        katalog = rows(c.execute('SELECT id, naziv, cijena, nakladnik, sifra_mzo, barkod FROM knjige'))
+        try:
+            vulpes = vulpes_artikli(c)
+        except ValueError:
+            vulpes = []
+        stavke = popis.upari_narudzbu(popis.narudzba_iz_redova(redovi), katalog, vulpes)
+        return {'stavke': stavke, 'vulpes': bool(vulpes)}
+    if put == '/api/skola-narudzba/spremi':
+        return spremi_narudzbu_skole(c, d)
     if put == '/api/uvoz/mzo':
         return uvoz_mzo(c, d['ime'], base64.b64decode(d['sadrzaj']))
     if put == '/api/uvoz/kompleti':
@@ -728,16 +787,82 @@ def api_post(c, put, d):
         o = c.execute('SELECT * FROM obrasci_nakladnika WHERE nakladnik = ?', (n['nakladnik'],)).fetchone()
         if not o:
             raise ValueError('Za nakladnika %s još nije učitan Excel obrazac.' % n['nakladnik'])
-        kolicine = {}
+        kolicine, po_sifri, sifra_stavke = {}, {}, {}
         for s in n['stavke']:
             b = obrasci.barkod_iz(s['barkod'])
             if b:
                 kolicine[b] = kolicine.get(b, 0) + s['kolicina']
-        sadrzaj, upisano, listovi = obrasci.popuni(o['sadrzaj'], kolicine)
-        nema = [s for s in n['stavke'] if obrasci.barkod_iz(s['barkod']) not in upisano]
+            sif = sifra_stavke_knjige(c, s).lstrip('0')
+            if sif:
+                po_sifri[sif] = po_sifri.get(sif, 0) + s['kolicina']
+                sifra_stavke[s['id']] = sif
+        sadrzaj, upisano, listovi = obrasci.popuni(o['sadrzaj'], kolicine, po_sifri)
+        nema = [s for s in n['stavke'] if obrasci.barkod_iz(s['barkod']) not in upisano
+                and ('s:' + sifra_stavke.get(s['id'], '-')) not in upisano]
         ime = re.sub(r'(?i)\.xlsx$', '', o['ime']) + '_br%d-%d.xlsx' % (n['broj'], n['godina'])
         return {'ime': ime, 'sadrzaj': base64.b64encode(sadrzaj).decode(), 'upisano': len(upisano), 'nema': nema,
                 'listovi': listovi}
+    if put == '/api/email/postavke':
+        e = email_postavke()
+        for k in ('adresa', 'lozinka', 'posluzitelj', 'port', 'ime'):
+            if k in d and not (k == 'lozinka' and not d[k]):  # prazna lozinka = ostavi staru
+                e[k] = str(d[k]).strip()
+        spremi_email_postavke(e)
+        return email_javno(e)
+    if put == '/api/email/test':
+        e = email_postavke()
+        prima = posta.posalji(e, e.get('adresa'), 'Probni e-mail iz programa Narudžbe knjiga',
+                              'Ovo je probni e-mail. Ako ga vidite, slanje narudžbenica iz programa radi.', kopija_sebi=False)
+        return {'poslano': prima}
+    if put == '/api/narudzbenice/posalji':  # narudžbenice odmah e-mailom nakladnicima, s Excel prilogom
+        e, rez = email_postavke(), []
+        for nid in d['ids']:
+            n = api_get(c, '/api/narudzbenica', {'id': [str(nid)]})
+            r = {'id': nid, 'broj': n['broj'], 'nakladnik': n['nakladnik'], 'email': n['email']}
+            try:
+                if not n['email']:
+                    raise ValueError('nakladnik nema upisan e-mail')
+                ime, sadrzaj, nema = narudzbenica_prilog(c, n)
+                naslov, tijelo = tekst_narudzbenice(c, n, d.get('poruka', ''))
+                posta.posalji(e, n['email'], naslov, tijelo, [(ime, sadrzaj)])
+                c.execute('UPDATE narudzbenice SET poslano = ? WHERE id = ?',
+                          (datetime.datetime.now().strftime('%Y-%m-%d %H:%M') + ' → ' + n['email'], nid))
+                c.commit()  # svaki poslani se odmah zapamti (da se ne pošalje dvaput ako sljedeći ne uspije)
+                r.update(ok=True, prilog=ime, nema=[s['naziv'] for s in nema])
+            except ValueError as greska:
+                r.update(ok=False, greska=str(greska))
+            rez.append(r)
+        return {'rezultati': rez}
+    if put == '/api/knjige/sifre':  # šifra nakladnika s eRačuna (npr. Školska knjiga) - za prepoznavanje sljedećih računa
+        for par in d['parovi']:
+            k = c.execute('SELECT nakladnik FROM knjige WHERE id = ?', (par['id'],)).fetchone()
+            if k:
+                c.execute("UPDATE knjige SET sifra_nakladnika = ? WHERE id = ? AND COALESCE(sifra_nakladnika, '') = ''",
+                          (sifra_nakladnika(k['nakladnik'], str(par['sifra']).strip()[:30]), par['id']))
+        return {}
+    if put == '/api/primka/datoteka':  # eRačun (XML) ili otpremnica (Excel) nakladnika -> knjige za Stiglo
+        r = eracun.citaj_otpremnicu(d['ime'], base64.b64decode(d['sadrzaj']))
+        r['stavke'] = upari_primku(c, r['stavke'])
+        return r
+    if put == '/api/obrasci/ispis':  # obrasci za skeniranje: zapamti točan popis knjiga svakog ispisanog obrasca
+        out = []
+        for k in api_get(c, '/api/obrasci', {'ids': [','.join(str(i) for i in d['ids'])]}):
+            oid = c.execute('INSERT INTO obrasci_ispis(komplet_id, skola_id, razred, naziv, knjige, datum) VALUES(?, ?, ?, ?, ?, ?)',
+                            (k['id'], k['skola_id'], k['razred'], k['naziv'], json.dumps([b['id'] for b in k['knjige']]),
+                             datetime.date.today().isoformat())).lastrowid
+            out.append(dict(k, obrazac_id=oid))
+        return out
+    if put == '/api/obrasci/skenirani':  # podaci obrazaca prepoznatih na skenu
+        out = {}
+        for oid in d['ids']:
+            o = c.execute('SELECT o.*, s.naziv AS skola FROM obrasci_ispis o LEFT JOIN skole s ON s.id = o.skola_id WHERE o.id = ?',
+                          (oid,)).fetchone()
+            if o:
+                ids = json.loads(o['knjige'] or '[]')
+                knj = {k['id']: k for k in rows(c.execute('SELECT id, naziv, nakladnik, cijena, barkod, vrsta FROM knjige WHERE id IN (%s)'
+                                                           % ','.join('?' * len(ids)), ids))} if ids else {}
+                out[oid] = dict(o, knjige=[knj[i] for i in ids if i in knj])
+        return out
     if put == '/api/narudzbenica/obrisi':
         c.execute('DELETE FROM narudzbenice_stavke WHERE narudzbenica_id = ?', (d['id'],))
         c.execute('DELETE FROM narudzbenice WHERE id = ?', (d['id'],))
@@ -767,6 +892,105 @@ def api_post(c, put, d):
         c.execute('DELETE FROM rabljene WHERE id = ?', (d['id'],))
         return {}
     raise KeyError(put)
+
+
+def email_postavke():
+    try:
+        with open(CONFIG, encoding='utf-8-sig') as f:
+            return dict(json.load(f).get('email') or {})
+    except (OSError, ValueError):
+        return {}
+
+
+def spremi_email_postavke(e):
+    cfg = {}
+    try:
+        with open(CONFIG, encoding='utf-8-sig') as f:
+            cfg = json.load(f)
+    except (OSError, ValueError):
+        pass
+    cfg['email'] = e
+    with open(CONFIG, 'w', encoding='utf-8') as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+
+
+def email_javno(e):
+    """Postavke e-maila za preglednik - bez lozinke."""
+    zad = posta.zadani_posluzitelj(e.get('adresa'))
+    return {'adresa': e.get('adresa', ''), 'ime': e.get('ime', ''), 'posluzitelj': e.get('posluzitelj', ''),
+            'port': e.get('port', ''), 'ima_lozinku': bool(e.get('lozinka')), 'zadani_posluzitelj': zad[0]}
+
+
+def tekst_narudzbenice(c, n, poruka=''):
+    p = postavke(c)
+    povrat = n.get('tip') == 'povrat'
+    kom = sum(s['kolicina'] for s in n['stavke'])
+    naslov = '%s %d/%d - %s' % ('Povratnica' if povrat else 'Narudžbenica', n['broj'], n['godina'], p.get('firma', ''))
+    tijelo = ('Poštovani,\n\nprema povratnici br. %d/%d vraćamo Vam sljedeće neprodane udžbenike:\n\n' if povrat else
+              'Poštovani,\n\nmolimo da nam prema narudžbenici br. %d/%d isporučite (popis je i u prilogu, u Excelu):\n\n') \
+        % (n['broj'], n['godina'])
+    tijelo += '\n'.join('%d kom - %s%s' % (s['kolicina'], s['naziv'], ' (%s)' % s['barkod'] if s['barkod'] else '')
+                        for s in n['stavke'])
+    tijelo += '\n\nUkupno: %d kom.' % kom
+    if n.get('napomena'):
+        tijelo += '\n' + n['napomena']
+    if poruka:
+        tijelo += '\n\n' + poruka
+    tijelo += '\n\nLijep pozdrav,\n%s\n%s\ntel. %s' % (p.get('firma', ''), p.get('adresa', ''), p.get('telefon', ''))
+    if p.get('oib'):
+        tijelo += '\nOIB: %s' % p['oib']
+    return naslov, tijelo
+
+
+def sifra_stavke_knjige(c, s):
+    """Šifra nakladnika iz kataloga za stavku narudžbenice (po barkodu ili nazivu), '' ako je nema."""
+    k = c.execute("SELECT sifra_nakladnika FROM knjige WHERE COALESCE(sifra_nakladnika, '') != '' AND "
+                  "((barkod != '' AND barkod = ?) OR UPPER(naziv) = UPPER(?)) LIMIT 1", (s['barkod'] or '', s['naziv'])).fetchone()
+    return k['sifra_nakladnika'] if k else ''
+
+
+def narudzbenica_prilog(c, n):
+    """Excel prilog narudžbenice: popunjen obrazac nakladnika ako je učitan, inače naša tablica. Vraća (ime, bajtovi, nema)."""
+    if n.get('tip') != 'povrat' and n.get('obrazac'):
+        r = api_post(c, '/api/narudzbenica/excel', {'id': n['id']})
+        return r['ime'], base64.b64decode(r['sadrzaj']), r['nema']
+    p = postavke(c)
+    naslov = '%s br. %d/%d' % ('POVRATNICA' if n.get('tip') == 'povrat' else 'NARUDŽBENICA', n['broj'], n['godina'])
+    redovi = [[p.get('firma', '')], [p.get('adresa', '') + (' · OIB ' + p['oib'] if p.get('oib') else '')],
+              [naslov + ' · ' + n['nakladnik'] + ' · ' + '.'.join(reversed(n['datum'].split('-'))) + '.'], [],
+              ['Rb.', 'Barkod', 'Šifra', 'Naziv', 'Količina']]
+    redovi += [[i + 1, s['barkod'] or '', sifra_stavke_knjige(c, s), s['naziv'], s['kolicina']] for i, s in enumerate(n['stavke'])]
+    if not any(r[2] for r in redovi[5:]):  # nitko nema šifru - bez tog stupca
+        redovi = redovi[:4] + [r[:2] + r[3:] for r in redovi[4:]]
+    redovi += [[], ['', ''] + ([''] if len(redovi[4]) == 5 else []) + ['Ukupno komada', sum(s['kolicina'] for s in n['stavke'])]]
+    ime = re.sub(r'[^\w\-]+', '_', popis.bez_kvacica(n['nakladnik']).lower()).strip('_') or 'nakladnik'
+    return ('%s_%s_%d-%d.xlsx' % ('povratnica' if n.get('tip') == 'povrat' else 'narudzbenica', ime, n['broj'], n['godina']),
+            posta.xlsx(redovi, sirine=(6, 17, 12, 70, 10) if len(redovi[4]) == 5 else (6, 17, 70, 10), podebljani=(0, 2, 4, len(redovi) - 1)), [])
+
+
+def upari_primku(c, stavke):
+    """Stavke s otpremnice/eRačuna -> knjige: po barkodu, šifri nakladnika, pa po nazivu (s prijedlozima)."""
+    katalog = rows(c.execute('SELECT id, naziv, cijena, nakladnik, barkod, sifra_mzo, sifra_nakladnika FROM knjige'))
+    po_barkodu = {k['barkod']: k for k in katalog if k['barkod']}
+    po_sifri = {}
+    for k in katalog:
+        if k['sifra_nakladnika']:
+            po_sifri.setdefault(k['sifra_nakladnika'].lstrip('0'), k)
+    kand, _ = popis.kandidati([k for k in katalog], [])
+    for s in stavke:
+        s['kolicina'] = int(round(s.get('kolicina') or 0))
+        k = po_barkodu.get(s.get('barkod') or '') or (po_sifri.get((s.get('sifra') or '').lstrip('0')) if s.get('sifra') else None)
+        if k:
+            s['knjiga'] = {'id': k['id'], 'naziv': k['naziv'], 'barkod': k['barkod'] or '', 'ocjena': 1.0}
+            s['prijedlozi'] = []
+            continue
+        p = [x for x in popis.predlozi({'naslov': s['naziv'], 'autori': '', 'nakladnik': '', 'sifra': ''}, kand, {})
+             if x['tip'] == 'k'][:4]
+        for x in p:
+            x['barkod'] = (next((k for k in katalog if k['id'] == x['id']), {}) or {}).get('barkod') or ''
+        s['prijedlozi'] = p
+        s['knjiga'] = p[0] if p and p[0]['ocjena'] >= 0.8 else None
+    return stavke
 
 
 def prijedlog_narudzbenice(c, nakladnik, razina=''):
@@ -1033,8 +1257,8 @@ PREDLOZAK = ['Škola', 'Smjer', 'Razred', 'Barkod', 'Naziv', 'Nakladnik', 'Cijen
 
 
 def citaj_tablicu(ime, sadrzaj):
-    if ime.lower().endswith('.xlsx'):
-        return popis.citaj_xlsx(sadrzaj)
+    if not ime.lower().endswith(('.csv', '.txt')):
+        return popis.redovi_iz_datoteke(ime, sadrzaj)
     tekst = None
     for enc in ('utf-8-sig', 'cp1250'):
         try:
@@ -1110,6 +1334,83 @@ def uvoz_kompleta(c, ime, sadrzaj):
     return {'kompleta': len(kompleti), 'knjiga': veza, 'novih_knjiga': novih_knjiga}
 
 
+def knjiga_iz_izbora(c, iz, s):
+    """Odabrana knjiga s popisa/narudžbe škole -> id knjige u katalogu (iz Vulpesa ili nova se doda). Vraća (id, 1 ako je nova)."""
+    nova = 0
+    if iz['tip'] == 'k':
+        knjiga = iz['id']
+    elif iz['tip'] == 'v':
+        r = c.execute('SELECT id FROM knjige WHERE barkod = ? AND barkod != ""', (iz['barkod'],)).fetchone()
+        knjiga = r['id'] if r else c.execute(
+            'INSERT INTO knjige(naziv, cijena, barkod, vulpes_sifra, nakladnik) VALUES(?, ?, ?, ?, ?)',
+            (iz['naziv'], iz['cijena'], iz['barkod'], iz.get('sifra'), normaliziraj_nakladnika(s.get('nakladnik', '')))).lastrowid
+        nova = 0 if r else 1
+    else:
+        knjiga = c.execute('INSERT INTO knjige(naziv, autori, nakladnik, cijena, barkod) VALUES(?, ?, ?, ?, ?)',
+                           (iz.get('naziv') or s.get('naslov'), s.get('autori', ''), normaliziraj_nakladnika(s.get('nakladnik', '')),
+                            float(s.get('cijena') or 0), s.get('barkod') or '')).lastrowid
+        nova = 1
+    c.execute('UPDATE knjige SET aktivna = 1 WHERE id = ?', (knjiga,))
+    return knjiga, nova
+
+
+def sifra_nakladnika(nakladnik, sifra):
+    """Šifre Školske knjige uvijek počinju nulom (u Excelu i ručnom upisu nula se zna izgubiti) - vrati je."""
+    sifra = re.sub(r'\s+', '', str(sifra or ''))
+    if sifra and normaliziraj_nakladnika(nakladnik) == 'ŠK' and sifra.isdigit() and not sifra.startswith('0'):
+        sifra = '0' + sifra
+    return sifra
+
+
+def normaliziraj_nakladnika(n):
+    """Naziv nakladnika kako ga program već koristi (ŠK, PROFIL, ALFA...)."""
+    b = popis.bez_kvacica(n or '').strip()
+    if not b:
+        return ''
+    if b in ('SK', 'S.K.', 'S. K.') or 'SKOLSKA KNJIGA' in b:
+        return 'ŠK'
+    for kratko in ('PROFIL', 'ALFA', 'ELEMENT', 'NEODIDACTA', 'LJEVAK', 'ALKA', 'MERIDIJANI', 'SYSPRINT'):
+        if kratko in b:
+            return kratko
+    if 'KLETT' in b:
+        return 'PROFIL'
+    return (n or '').strip().upper()[:40]
+
+
+def spremi_narudzbu_skole(c, d):
+    """Narudžba škole iz učitane datoteke: jedna narudžba (ili jedna po razredu) s količinama."""
+    sid = d.get('skola_id')
+    if not sid:
+        raise ValueError('Odaberi školu.')
+    skola = c.execute('SELECT naziv FROM skole WHERE id = ?', (sid,)).fetchone()
+    stavke = [s for s in d['stavke'] if s.get('izbor') and int(s.get('kolicina') or 0) > 0]
+    if not stavke:
+        raise ValueError('Nijedna knjiga nema količinu veću od 0.')
+    grupe = {}
+    novih = 0
+    for s in stavke:
+        knjiga, nova = knjiga_iz_izbora(c, s['izbor'], s)
+        novih += nova
+        k = c.execute('SELECT * FROM knjige WHERE id = ?', (knjiga,)).fetchone()
+        if s.get('sifra') and not k['sifra_mzo']:
+            c.execute('UPDATE knjige SET sifra_mzo = ? WHERE id = ?', (s['sifra'], knjiga))
+        raz = (s.get('razred') or '').strip() if d.get('po_razredima') else ''
+        cijena = float(k['cijena'] or 0) or float(s.get('cijena') or 0)
+        st = grupe.setdefault(raz, {})
+        if knjiga in st:
+            st[knjiga]['kolicina'] += int(s['kolicina'])
+        else:
+            st[knjiga] = {'knjiga_id': knjiga, 'naziv': k['naziv'], 'barkod': k['barkod'] or '', 'nakladnik': k['nakladnik'] or '',
+                          'cijena': cijena, 'kolicina': int(s['kolicina'])}
+    ids = []
+    for raz in sorted(grupe, key=lambda r: (len(r), r)):
+        ids.append(spremi_narudzbu(c, {
+            'kupac': (d.get('kupac') or skola['naziv']).strip() + (' – %s. razred' % raz if raz else ''),
+            'telefon': d.get('telefon', ''), 'skola_id': sid, 'razred': raz, 'platitelj': d.get('platitelj', ''),
+            'napomena': d.get('napomena', ''), 'stavke': list(grupe[raz].values())})['id'])
+    return {'ids': ids, 'novih_knjiga': novih}
+
+
 def spremi_popis(c, d):
     sid = d.get('skola_id')
     if not sid:
@@ -1127,20 +1428,8 @@ def spremi_popis(c, d):
         novi_komplet_popis(c, kid)
         br_kompleta += 1
         for s in stavke:
-            iz = s['izbor']
-            if iz['tip'] == 'k':
-                knjiga = iz['id']
-            elif iz['tip'] == 'v':
-                r = c.execute('SELECT id FROM knjige WHERE barkod = ? AND barkod != ""', (iz['barkod'],)).fetchone()
-                knjiga = r['id'] if r else c.execute(
-                    'INSERT INTO knjige(naziv, cijena, barkod, vulpes_sifra) VALUES(?, ?, ?, ?)',
-                    (iz['naziv'], iz['cijena'], iz['barkod'], iz['sifra'])).lastrowid
-                br_novih += 0 if r else 1
-            else:
-                knjiga = c.execute('INSERT INTO knjige(naziv, autori, nakladnik) VALUES(?, ?, ?)',
-                                   (iz.get('naziv') or s.get('naslov'), s.get('autori', ''), s.get('nakladnik', ''))).lastrowid
-                br_novih += 1
-            c.execute('UPDATE knjige SET aktivna = 1 WHERE id = ?', (knjiga,))
+            knjiga, nova = knjiga_iz_izbora(c, s['izbor'], s)
+            br_novih += nova
             if s.get('sifra'):
                 c.execute('UPDATE knjige SET sifra_mzo = ? WHERE id = ?', (s['sifra'], knjiga))
             c.execute('INSERT OR IGNORE INTO komplet_knjige(komplet_id, knjiga_id, predmet) VALUES(?, ?, ?)',
