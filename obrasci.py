@@ -15,6 +15,7 @@ from decimal import Decimal, InvalidOperation
 
 NS = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
 BARKOD = ('BAR CODE', 'BARCODE', 'BARKOD', 'BAR KOD', 'EAN', 'ISBN')
+SIFRA = ('SIFRA', 'SIF.', 'SIF', 'KAT. BROJ', 'KATALOSKI BROJ', 'SIFRA ARTIKLA', 'SIFRA PROIZVODA')
 KOLICINA = ('KOLICINA', 'KOL.', 'KOL', 'KOM', 'KOM.', 'NARUCENO', 'BROJ PRIMJERAKA')
 CELIJA_RE = re.compile(r'<c\b([^>]*?)(?:/>|>(.*?)</c>)', re.S)
 RED_RE = re.compile(r'<row\b([^>]*)>(.*?)</row>', re.S)
@@ -97,8 +98,8 @@ def _celije(red_xml, ss):
 
 
 def _zaglavlje(celije):
-    """Ako je red zaglavlje (ima stupac za barkod), vraća (stupac barkoda, stupac količine ili None)."""
-    bk = kol = None
+    """Ako je red zaglavlje (ima stupac za barkod ili šifru), vraća (stupac barkoda, stupac količine, stupac šifre)."""
+    bk = kol = sf = None
     for st, c in celije.items():
         t = bez_kvacica(c[2])
         if not t or len(t) > 40:
@@ -107,7 +108,9 @@ def _zaglavlje(celije):
             bk = st
         elif kol is None and any(t == x or (len(x) > 4 and t.startswith(x)) for x in KOLICINA):
             kol = st
-    return (bk, kol) if bk else None
+        elif sf is None and any(t == x or (len(x) > 4 and t.startswith(x)) for x in SIFRA):
+            sf = st
+    return (bk, kol, sf) if (bk or sf) else None
 
 
 def _postavi(red_xml, red_br, stupac, nova_celija, celije):
@@ -127,9 +130,9 @@ def _stil(atr):
     return ' s="%s"' % m.group(1) if m else ''
 
 
-def popuni(sadrzaj, kolicine):
-    """sadrzaj = bajtovi .xlsx obrasca, kolicine = {barkod: količina}.
-    Vraća (bajtovi popunjenog obrasca, {barkod: upisano}, opis po listovima)."""
+def popuni(sadrzaj, kolicine, po_sifri=None):
+    """sadrzaj = bajtovi .xlsx obrasca, kolicine = {barkod: količina}, po_sifri = {šifra bez vodećih nula: količina}
+    (za redove bez barkoda). Vraća (bajtovi popunjenog obrasca, {barkod ili 's:'+šifra: upisano}, opis po listovima)."""
     if sadrzaj[:4] == b'\xd0\xcf\x11\xe0':
         raise ValueError('Ovo je stari Excel format (.xls). Otvorite obrazac u Excelu i spremite ga kao '
                          '"Excel radna knjiga (.xlsx)" (Datoteka -> Spremi kao), pa ga učitajte ponovno.')
@@ -139,6 +142,7 @@ def popuni(sadrzaj, kolicine):
         raise ValueError('Datoteka nije Excel (.xlsx) obrazac.')
     ss = _zajednicki(zin)
     kolicine = {barkod_iz(k): v for k, v in kolicine.items() if barkod_iz(k) and v}
+    po_sifri = {str(k).strip().lstrip('0'): v for k, v in (po_sifri or {}).items() if str(k).strip().lstrip('0') and v}
     upisano, opis, promjene = {}, [], {}
     for naziv, put in _listovi(zin):
         try:
@@ -157,21 +161,26 @@ def popuni(sadrzaj, kolicine):
             if stupci is None:
                 z = _zaglavlje(celije)
                 if z:
-                    bk, kol = z
+                    bk, kol, sf = z
                     if kol is None:  # obrazac bez stupca za količinu (npr. Školska knjiga) - dodaj ga
                         kol = stupac_slova(max(stupac_broj(s) for s in celije) + 1)
-                        ref = celije[bk][0]
+                        ref = celije[bk or sf][0]
                         novo = _postavi(tijelo, rb, kol, '<c r="%s%s"%s t="inlineStr"><is><t>KOLIČINA</t></is></c>'
                                         % (kol, rb, _stil(ref)), celije)
-                    stupci = (bk, kol)
+                    stupci = (bk, kol, sf)
             else:
-                bk, kol = stupci
-                b = barkod_iz(celije.get(bk, ('', '', ''))[2])
-                if b and b in kolicine:
-                    k = kolicine[b]
-                    stil = _stil(celije[kol][0]) if kol in celije else _stil(celije[bk][0])
+                bk, kol, sf = stupci
+                b = barkod_iz(celije.get(bk, ('', '', ''))[2]) if bk else ''
+                sif = str(celije.get(sf, ('', '', ''))[2]).strip()
+                if sif.endswith('.0'):
+                    sif = sif[:-2]
+                sif = sif.replace(' ', '').lstrip('0') if sf else ''
+                kljuc = b if b and b in kolicine else ('s:' + sif if sif and sif in po_sifri else None)
+                if kljuc:
+                    k = kolicine[b] if kljuc == b else po_sifri[sif]
+                    stil = _stil(celije[kol][0]) if kol in celije else _stil(celije[bk or sf][0])
                     novo = _postavi(tijelo, rb, kol, '<c r="%s%s"%s><v>%s</v></c>' % (kol, rb, stil, k), celije)
-                    upisano[b] = upisano.get(b, 0) + k
+                    upisano[kljuc] = upisano.get(kljuc, 0) + k
                     n_upisa += 1
                 elif kol in celije and '<f' not in celije[kol][1] and str(celije[kol][2]).strip():
                     # stara količina koja je ostala u obrascu (npr. od prošle narudžbe) - obriši je
